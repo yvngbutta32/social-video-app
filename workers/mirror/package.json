@@ -1,0 +1,24 @@
+{
+  "name": "@social-video/mirror-worker",
+  "version": "1.0.0",
+  "description": "Mirror Worker - Creates encrypted admin archives of creator content",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "@aws-sdk/client-s3": "^3.556.0",
+    "@aws-sdk/s3-request-presigner": "^3.556.0",
+    "pg": "^8.11.5",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

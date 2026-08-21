@@ -1,0 +1,827 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  passwordHash     String            @map("password_hash")
+  name             String?
+  avatarUrl        String?           @map("avatar_url")
+  timezone         String            @default("UTC")
+  locale           String            @default("en")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  lastLoginAt      DateTime?         @map("last_login_at")
+  isActive         Boolean           @default(true) @map("is_active")
+  emailVerified    Boolean           @default(false)
+  role             UserRole          @default(viewer)
+  usedInviteCodeId String?           @unique @map("used_invite_code_id")
+  creatorProfile   CreatorProfile?
+  inviteCodes      InviteCode[]      @relation("InviteCreatedBy")
+  usedInviteCode   InviteCode?       @relation("InviteUsedBy")
+  uploadedVideos   Video[]           @relation("VideoUploader")
+  invitedMembers   WorkspaceMember[] @relation("WorkspaceInviter")
+  workspaces       WorkspaceMember[]
+  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
+
+  @@index([email])
+  @@index([isActive])
+  @@index([role])
+  @@index([email], map: "idx_users_email")
+  @@map("users")
+}
+
+model Workspace {
+  id              String            @id @default(uuid())
+  name            String
+  slug            String            @unique
+  ownerId         String            @map("owner_id")
+  settings        Json              @default("{}")
+  branding        Json              @default("{}")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  plan            WorkspacePlan     @default(free)
+  abTests         ABTest[]
+  hooks           Hook[]
+  retentionCurves RetentionCurve[]
+  scheduledPosts  ScheduledPost[]
+  socialAccounts  SocialAccount[]
+  subscriptions   Subscription[]
+  videos          Video[]
+  members         WorkspaceMember[]
+  owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+
+  @@index([ownerId])
+  @@index([slug])
+  @@index([ownerId], map: "idx_workspaces_owner")
+  @@index([slug], map: "idx_workspaces_slug")
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  userId      String    @map("user_id")
+  invitedBy   String?   @map("invited_by")
+  invitedAt   DateTime  @default(now()) @map("invited_at")
+  joinedAt    DateTime? @map("joined_at")
+  role        UserRole  @default(viewer)
+  inviter     User?     @relation("WorkspaceInviter", fields: [invitedBy], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([userId], map: "idx_ws_members_user")
+  @@index([workspaceId], map: "idx_ws_members_workspace")
+  @@map("workspace_members")
+}
+
+model SocialAccount {
+  id                    String          @id @default(uuid())
+  workspaceId           String          @map("workspace_id")
+  platformUserId        String          @map("platform_user_id")
+  username              String?
+  displayName           String?         @map("display_name")
+  avatarUrl             String?         @map("avatar_url")
+  accessTokenEncrypted  String          @map("access_token_encrypted")
+  refreshTokenEncrypted String?         @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime?       @map("token_expires_at")
+  metadata              Json            @default("{}")
+  isActive              Boolean         @default(true) @map("is_active")
+  connectedAt           DateTime        @default(now()) @map("connected_at")
+  lastSyncAt            DateTime?       @map("last_sync_at")
+  platform              Platform
+  scopes                Json            @default("[]")
+  scheduledPosts        ScheduledPost[]
+  workspace             Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform, platformUserId])
+  @@index([workspaceId])
+  @@index([platform])
+  @@index([platform], map: "idx_social_accounts_platform")
+  @@index([workspaceId], map: "idx_social_accounts_workspace")
+  @@map("social_accounts")
+}
+
+model Video {
+  id                 String          @id @default(uuid())
+  workspaceId        String          @map("workspace_id")
+  uploadedBy         String          @map("uploaded_by")
+  title              String?
+  description        String?
+  originalFilename   String?         @map("original_filename")
+  minioObjectKey     String          @map("minio_object_key")
+  minioBucket        String          @default("videos") @map("minio_bucket")
+  durationSeconds    Float?          @map("duration_seconds")
+  width              Int?
+  height             Int?
+  fps                Float?
+  fileSizeBytes      BigInt?         @map("file_size_bytes")
+  mimeType           String?         @map("mime_type")
+  metadata           Json            @default("{}")
+  transcript         String?
+  transcriptLanguage String?         @map("transcript_language")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  processedAt        DateTime?       @map("processed_at")
+  status             VideoStatus     @default(uploading)
+  contentMirrors     ContentMirror[]
+  hooks              Hook[]
+  variants           VideoVariant[]
+  uploader           User            @relation("VideoUploader", fields: [uploadedBy], references: [id])
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)], map: "idx_videos_created")
+  @@index([status], map: "idx_videos_status")
+  @@index([workspaceId], map: "idx_videos_workspace")
+  @@map("videos")
+}
+
+model VideoVariant {
+  id                 String          @id @default(uuid())
+  videoId            String          @map("video_id")
+  variantType        String          @map("variant_type")
+  aspectRatio        String          @map("aspect_ratio")
+  hookId             String?         @map("hook_id")
+  hookText           String?         @map("hook_text")
+  caption            String?
+  thumbnailObjectKey String?         @map("thumbnail_object_key")
+  minioObjectKey     String?         @map("minio_object_key")
+  durationSeconds    Float?          @map("duration_seconds")
+  width              Int?
+  height             Int?
+  fileSizeBytes      BigInt?         @map("file_size_bytes")
+  generationParams   Json            @default("{}") @map("generation_params")
+  errorMessage       String?         @map("error_message")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  completedAt        DateTime?       @map("completed_at")
+  platform           Platform
+  hashtags           Json            @default("[]")
+  status             VariantStatus   @default(pending)
+  scheduledPosts     ScheduledPost[]
+  video              Video           @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([platform])
+  @@index([status])
+  @@index([platform], map: "idx_variants_platform")
+  @@index([status], map: "idx_variants_status")
+  @@index([videoId], map: "idx_variants_video")
+  @@map("video_variants")
+}
+
+model Hook {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  videoId     String?   @map("video_id")
+  niche       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  metadata    Json      @default("{}")
+  name        String
+  text        String
+  type        String
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  platform    Platform?
+  video       Video?    @relation(fields: [videoId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([type])
+  @@index([platform])
+  @@index([niche, platform], map: "idx_hooks_niche_platform")
+  @@index([videoId], map: "idx_hooks_video")
+  @@index([workspaceId], map: "idx_hooks_workspace")
+  @@map("hooks")
+}
+
+model ScheduledPost {
+  id              String           @id @default(uuid())
+  workspaceId     String           @map("workspace_id")
+  variantId       String           @map("variant_id")
+  socialAccountId String           @map("social_account_id")
+  scheduledAt     DateTime         @map("scheduled_at")
+  postedAt        DateTime?        @map("posted_at")
+  platformPostId  String?          @map("platform_post_id")
+  errorMessage    String?          @map("error_message")
+  retryCount      Int              @default(0) @map("retry_count")
+  abTestId        String?          @map("ab_test_id")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  abTestVariant   String?          @map("ab_test_variant")
+  metadata        Json             @default("{}")
+  platformUrl     String?          @map("platform_url")
+  status          PostStatus       @default(draft)
+  retentionCurves RetentionCurve[]
+  abTest          ABTest?          @relation("ABTestVariants", fields: [abTestId], references: [id])
+  socialAccount   SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  variant         VideoVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([variantId])
+  @@index([socialAccountId])
+  @@index([abTestId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([status], map: "idx_scheduled_status")
+  @@index([scheduledAt], map: "idx_scheduled_time")
+  @@index([variantId], map: "idx_scheduled_variant")
+  @@index([workspaceId], map: "idx_scheduled_workspace")
+  @@map("scheduled_posts")
+}
+
+model ABTest {
+  id                      String          @id @default(uuid())
+  workspaceId             String          @map("workspace_id")
+  name                    String
+  hypothesis              String?
+  testType                String          @map("test_type")
+  confidenceLevel         Float           @default(0.95) @map("confidence_level")
+  minimumDetectableEffect Float           @default(0.1) @map("minimum_detectable_effect")
+  trafficSplit            Json            @default("{}") @map("traffic_split")
+  winnerVariantId         String?         @map("winner_variant_id")
+  startedAt               DateTime        @default(now()) @map("started_at")
+  completedAt             DateTime?       @map("completed_at")
+  results                 Json            @default("{}")
+  status                  ABTestStatus    @default(running)
+  workspace               Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  variants                ScheduledPost[] @relation("ABTestVariants")
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([status], map: "idx_ab_tests_status")
+  @@index([workspaceId], map: "idx_ab_tests_workspace")
+  @@map("ab_tests")
+}
+
+model PostMetric {
+  id               String   @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  scheduledPostId  String   @map("scheduled_post_id") @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  platform         platform
+  recordedAt       DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  views            BigInt?  @default(0)
+  likes            BigInt?  @default(0)
+  comments         BigInt?  @default(0)
+  shares           BigInt?  @default(0)
+  saves            BigInt?  @default(0)
+  clicks           BigInt?  @default(0)
+  reach            BigInt?  @default(0)
+  impressions      BigInt?  @default(0)
+  watchTimeSeconds BigInt?  @default(0) @map("watch_time_seconds")
+  avgWatchTime     Decimal? @map("avg_watch_time") @db.Decimal(10, 2)
+  completionRate   Decimal? @map("completion_rate") @db.Decimal(5, 4)
+  followerGain     Int?     @default(0) @map("follower_gain")
+  profileVisits    BigInt?  @default(0) @map("profile_visits")
+  metadata         Json?    @default("{}")
+
+  @@id([id, recordedAt])
+  @@index([scheduledPostId, recordedAt(sort: Desc)])
+  @@index([workspaceId, recordedAt(sort: Desc)])
+  @@index([platform, recordedAt(sort: Desc)])
+  @@index([platform, recordedAt(sort: Desc)], map: "idx_post_metrics_platform")
+  @@index([scheduledPostId, recordedAt(sort: Desc)], map: "idx_post_metrics_post")
+  @@index([workspaceId, recordedAt(sort: Desc)], map: "idx_post_metrics_workspace")
+  @@map("post_metrics")
+}
+
+model RetentionCurve {
+  id              String        @id @default(uuid())
+  scheduledPostId String        @map("scheduled_post_id")
+  workspaceId     String        @map("workspace_id")
+  platform        Platform
+  percentile10    Float?        @map("percentile_10")
+  percentile25    Float?        @map("percentile_25")
+  percentile50    Float?        @map("percentile_50")
+  percentile75    Float?        @map("percentile_75")
+  percentile90    Float?        @map("percentile_90")
+  dropOffPoints   Json          @default("[]") @map("drop_off_points")
+  calculatedAt    DateTime      @default(now()) @map("calculated_at")
+  scheduledPost   ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledPostId])
+  @@index([scheduledPostId], map: "idx_retention_post")
+  @@map("retention_curves")
+}
+
+model RevenueEvent {
+  id          String   @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  source      String   @db.VarChar(50)
+  amountCents Int      @map("amount_cents")
+  currency    String?  @default("USD") @db.VarChar(3)
+  recorded_at DateTime @default(now()) @db.Timestamptz(6)
+  metadata    Json?    @default("{}")
+
+  @@id([id, recorded_at])
+  @@map("revenue_events")
+}
+
+model TrendSignal {
+  id               String      @id @default(uuid())
+  source           TrendSource
+  sourceId         String      @map("source_id")
+  niche            String?
+  keywords         Json        @default("[]")
+  title            String?
+  url              String?
+  velocityScore    Float?      @map("velocity_score")
+  volumeScore      Float?      @map("volume_score")
+  relevanceScore   Float?      @map("relevance_score")
+  competitionScore Float?      @map("competition_score")
+  brandSafetyScore Float?      @map("brand_safety_score")
+  compositeScore   Float?      @map("composite_score")
+  metadata         Json        @default("{}")
+  detectedAt       DateTime    @default(now()) @map("detected_at")
+  expiresAt        DateTime?   @map("expires_at")
+
+  @@index([niche, detectedAt(sort: Desc)])
+  @@index([compositeScore(sort: Desc)])
+  @@index([source, detectedAt(sort: Desc)])
+  @@index([compositeScore(sort: Desc)], map: "idx_trends_composite")
+  @@index([niche, detectedAt(sort: Desc)], map: "idx_trends_niche")
+  @@index([source, detectedAt(sort: Desc)], map: "idx_trends_source")
+  @@map("trend_signals")
+}
+
+model TrendSuggestion {
+  id              String       @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workspaceId     String       @map("workspace_id") @db.Uuid
+  source          trend_source
+  source_id       String?      @db.VarChar(255)
+  title           String
+  description     String?
+  niche           String?      @db.VarChar(100)
+  platform        platform?
+  keywords        String[]
+  viral_potential Decimal?     @db.Decimal(4, 3)
+  trend_velocity  Decimal?     @db.Decimal(6, 3)
+  raw_data        Json?        @default("{}")
+  fetched_at      DateTime     @default(now()) @db.Timestamptz(6)
+  expires_at      DateTime?    @db.Timestamptz(6)
+
+  @@id([id, fetched_at])
+  @@map("trend_suggestions")
+}
+
+model PerformancePattern {
+  id            String    @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workspaceId   String    @map("workspace_id") @db.Uuid
+  patternType   String    @map("pattern_type") @db.VarChar(50)
+  pattern_data  Json
+  confidence    Decimal   @db.Decimal(4, 3)
+  sample_size   Int
+  discovered_at DateTime  @default(now()) @db.Timestamptz(6)
+  valid_until   DateTime? @db.Timestamptz(6)
+
+  @@id([id, discovered_at])
+  @@map("performance_patterns")
+}
+
+model ViralPrediction {
+  id                  String   @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workspaceId         String   @map("workspace_id") @db.Uuid
+  video_id            String?  @db.Uuid
+  variantId           String?  @map("variant_id") @db.Uuid
+  prediction_type     String   @db.VarChar(50)
+  predicted_value     Decimal? @db.Decimal(10, 3)
+  confidence_interval Json?
+  modelVersion        String?  @map("model_version") @db.VarChar(50)
+  features            Json?    @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([id, createdAt])
+  @@index([variantId])
+  @@index([variantId], map: "idx_predictions_variant")
+  @@map("viral_predictions")
+}
+
+model UsageEvent {
+  id            String   @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  user_id       String?  @db.Uuid
+  eventType     String   @map("event_type") @db.VarChar(50)
+  resource_type String?  @db.VarChar(50)
+  resource_id   String?  @db.Uuid
+  properties    Json?    @default("{}")
+  recorded_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([id, recorded_at])
+  @@map("usage_events")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  workspaceId          String    @map("workspace_id")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  stripePriceId        String?   @map("stripe_price_id")
+  status               String?
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  cancelAtPeriodEnd    Boolean   @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([stripeSubscriptionId])
+  @@index([stripeSubscriptionId], map: "idx_subscriptions_stripe")
+  @@index([workspaceId], map: "idx_subscriptions_workspace")
+  @@map("subscriptions")
+}
+
+model InviteCode {
+  id          String       @id @default(uuid())
+  code        String       @unique @default(cuid())
+  email       String
+  role        UserRole     @default(creator)
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime
+  maxUses     Int          @default(1)
+  usedCount   Int          @default(0)
+  createdById String
+  usedById    String?      @unique
+  createdAt   DateTime     @default(now())
+  usedAt      DateTime?
+  createdBy   User         @relation("InviteCreatedBy", fields: [createdById], references: [id])
+  usedBy      User?        @relation("InviteUsedBy", fields: [usedById], references: [id])
+
+  @@index([email])
+  @@index([status])
+  @@map("invite_codes")
+}
+
+model CreatorProfile {
+  id             String          @id @default(uuid())
+  userId         String          @unique @map("user_id")
+  handle         String          @unique
+  displayName    String?         @map("display_name")
+  niche          String
+  bio            String?
+  tier           CreatorTier     @default(BETA)
+  folderPath     String          @map("folder_path")
+  autoMirror     Boolean         @default(true) @map("auto_mirror")
+  mirrorConfig   Json            @default("{}") @map("mirror_config")
+  settings       Json            @default("{}")
+  metrics        Json            @default("{}")
+  lastActiveAt   DateTime?       @map("last_active_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  contentMirrors ContentMirror[]
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([handle])
+  @@index([tier])
+  @@map("creator_profiles")
+}
+
+model ContentMirror {
+  id              String         @id @default(uuid())
+  creatorId       String         @map("creator_id")
+  originalVideoId String         @map("original_video_id")
+  variantIds      Json           @default("[]") @map("variant_ids")
+  archivePath     String         @map("archive_path")
+  mirrorStatus    MirrorStatus   @default(PENDING) @map("mirror_status")
+  checksum        String
+  sizeBytes       BigInt
+  metadata        Json           @default("{}")
+  deliveryStatus  DeliveryStatus @default(PENDING) @map("delivery_status")
+  deliveryPath    String?        @map("delivery_path")
+  deliveredAt     DateTime?      @map("delivered_at")
+  error           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  completedAt     DateTime?      @map("completed_at")
+  creator         CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  originalVideo   Video          @relation(fields: [originalVideoId], references: [id], onDelete: Cascade)
+  deliveryLogs    DeliveryLog[]
+
+  @@index([creatorId])
+  @@index([mirrorStatus])
+  @@index([createdAt(sort: Desc)])
+  @@map("content_mirrors")
+}
+
+model DeliveryConfig {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  destination DeliveryDestination
+  config      Json
+  schedule    String
+  enabled     Boolean             @default(true)
+  lastRun     DateTime?           @map("last_run")
+  nextRun     DateTime?           @map("next_run")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+  deliveryLogs DeliveryLog[]
+
+  @@map("delivery_configs")
+}
+
+model DeliveryLog {
+  id           String         @id @default(uuid())
+  mirrorId     String         @map("mirror_id")
+  configId     String         @map("config_id")
+  destination  DeliveryDestination
+  status       DeliveryStatus
+  filePath     String?        @map("file_path")
+  size         BigInt?
+  checksum     String?
+  url          String?
+  error        String?
+  metadata     Json?
+  retryCount   Int            @default(0) @map("retry_count")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  mirror       ContentMirror  @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
+  config       DeliveryConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@index([mirrorId])
+  @@index([configId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("delivery_logs")
+}
+
+model CreatorAlgorithmProfile {
+  id                  String   @id @default(uuid())
+  creatorId           String   @unique @map("creator_id")
+  optimalHookTypes    Json     @default("[]") @map("optimal_hook_types")
+  optimalPostTimes    Json     @default("{}") @map("optimal_post_times")
+  optimalDuration     Json     @default("{}") @map("optimal_duration")
+  retentionPattern    Json     @default("{}") @map("retention_pattern")
+  engagementWeights   Json     @default("{}") @map("engagement_weights")
+  viralVelocityThreshold Float   @default(0) @map("viral_velocity_threshold")
+  platformWeights     Json     @default("{}") @map("platform_weights")
+  contentPillars      Json     @default("[]") @map("content_pillars")
+  audienceInsights    Json     @default("{}") @map("audience_insights")
+  lastTrainedAt       DateTime? @map("last_trained_at")
+  trainingDataPoints  Int      @default(0) @map("training_data_points")
+  modelVersion        String   @default("1.0") @map("model_version")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([creatorId])
+  @@map("creator_algorithm_profiles")
+}
+
+model RetentionAnalysis {
+  id                String   @id @default(uuid())
+  scheduledPostId   String   @map("scheduled_post_id")
+  workspaceId       String   @map("workspace_id")
+  creatorId         String   @map("creator_id")
+  platform          Platform
+  sceneData         Json     @map("scene_data")
+  dropOffPoints     Json     @map("drop_off_points")
+  hookEffectiveness Float?   @map("hook_effectiveness")
+  optimalCutPoints  Json     @map("optimal_cut_points")
+  analyzedAt        DateTime @default(now()) @map("analyzed_at")
+
+  @@index([scheduledPostId])
+  @@index([creatorId])
+  @@index([platform])
+  @@map("retention_analyses")
+}
+
+model EngagementVelocity {
+  id                String   @id @default(uuid())
+  scheduledPostId   String   @map("scheduled_post_id")
+  workspaceId       String   @map("workspace_id")
+  creatorId         String   @map("creator_id")
+  platform          Platform
+  velocityScore     Float    @map("velocity_score")
+  accelerationScore Float    @map("acceleration_score")
+  viralProbability  Float    @map("viral_probability")
+  timeWindowMinutes Int      @map("time_window_minutes")
+  calculatedAt      DateTime @default(now()) @map("calculated_at")
+
+  @@index([scheduledPostId])
+  @@index([creatorId])
+  @@index([platform])
+  @@index([viralProbability(sort: Desc)])
+  @@map("engagement_velocities")
+}
+
+model PlatformRankingFactors {
+  id              String   @id @default(uuid())
+  platform        Platform @unique
+  niche           String?
+  factorWeights   Json     @map("factor_weights")
+  sampleSize      Int      @map("sample_size")
+  confidence      Float
+  discoveredAt    DateTime @default(now()) @map("discovered_at")
+  validUntil      DateTime? @map("valid_until")
+
+  @@index([platform, niche])
+  @@map("platform_ranking_factors")
+}
+
+model AdminAuditLog {
+  id           String   @id @default(uuid())
+  adminId      String   @map("admin_id")
+  action       String
+  resourceType String?  @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  metadata     Json
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([adminId])
+  @@index([createdAt(sort: Desc)])
+  @@map("admin_audit_logs")
+}
+
+model AuditLog {
+  id           String   @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  workspaceId  String?  @map("workspace_id") @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  action       String   @db.VarChar(100)
+  resourceType String?  @map("resource_type") @db.VarChar(50)
+  resourceId   String?  @map("resource_id") @db.Uuid
+  oldValues    Json?    @map("old_values")
+  newValues    Json?    @map("new_values")
+  ipAddress    String?  @map("ip_address") @db.Inet
+  userAgent    String?  @map("user_agent")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([id, createdAt])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)], map: "idx_audit_action")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_audit_user")
+  @@index([workspaceId, createdAt(sort: Desc)], map: "idx_audit_workspace")
+  @@map("audit_logs")
+}
+
+enum UserRole {
+  owner
+  admin
+  editor
+  viewer
+  creator
+}
+
+enum WorkspacePlan {
+  free
+  pro
+  agency
+  enterprise
+}
+
+enum VideoStatus {
+  uploading
+  processing
+  ready
+  failed
+  archived
+}
+
+enum VariantStatus {
+  pending
+  generating
+  ready
+  failed
+}
+
+enum PostStatus {
+  draft
+  scheduled
+  posting
+  posted
+  failed
+  cancelled
+}
+
+enum Platform {
+  tiktok
+  instagram
+  youtube
+  facebook
+  x
+  linkedin
+}
+
+enum ABTestStatus {
+  running
+  completed
+  stopped
+}
+
+enum TrendSource {
+  rss
+  reddit
+  youtube
+  google_trends
+  tiktok_creative
+}
+
+enum CreatorTier {
+  BETA
+  PRO
+  VIP
+}
+
+enum InviteStatus {
+  PENDING
+  USED
+  EXPIRED
+  REVOKED
+}
+
+enum MirrorStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum DeliveryDestination {
+  MINIO
+  S3
+  GDRIVE
+  ONEDRIVE
+  EMAIL
+  LOCAL
+}
+
+enum DeliveryStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ab_test_status {
+  running
+  completed
+  stopped
+}
+
+enum platform {
+  tiktok
+  instagram
+  youtube
+  facebook
+  x
+  linkedin
+}
+
+enum post_status {
+  draft
+  scheduled
+  posting
+  posted
+  failed
+  cancelled
+}
+
+enum trend_source {
+  rss
+  reddit
+  youtube
+  google_trends
+  tiktok_creative
+}
+
+enum user_role {
+  owner
+  admin
+  editor
+  viewer
+}
+
+enum variant_status {
+  pending
+  generating
+  ready
+  failed
+}
+
+enum video_status {
+  uploading
+  processing
+  ready
+  failed
+  archived
+}
+
+enum workspace_plan {
+  free
+  pro
+  agency
+  enterprise
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@social-video/trends-worker",
+  "version": "1.0.0",
+  "description": "Trend detection worker for social video marketing platform",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "jest --coverage",
+    "lint": "eslint src/",
+    "db:migrate": "node scripts/migrate.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "pg": "^8.12.0",
+    "pino": "^9.2.0",
+    "pino-pretty": "^11.2.1",
+    "cheerio": "^1.0.0",
+    "node-cron": "^3.0.3",
+    "amqplib": "^0.10.4",
+    "openai": "^4.52.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^9.7.0",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.10"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

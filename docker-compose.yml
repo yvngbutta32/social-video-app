@@ -1,0 +1,585 @@
+services:
+  # ============================================================
+  # INFRASTRUCTURE LAYER
+  # ============================================================
+  
+  traefik:
+    image: traefik:v3.0
+    container_name: sv-traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sv-internal
+      - sv-public
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./letsencrypt:/letsencrypt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=local"
+      - "traefik.http.routers.traefik.middlewares=authelia@docker"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+
+  authelia:
+    image: authelia/authelia:latest
+    container_name: sv-authelia
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./authelia:/config
+    environment:
+      - TZ=UTC
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authelia.rule=Host(`auth.localhost`)"
+      - "traefik.http.routers.authelia.entrypoints=websecure"
+      - "traefik.http.routers.authelia.tls.certresolver=local"
+      - "traefik.http.services.authelia.loadbalancer.server.port=9091"
+
+  gitea:
+    image: gitea/gitea:latest
+    container_name: sv-gitea
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD_FILE=/run/secrets/gitea_db_password
+    secrets:
+      - gitea_db_password
+    depends_on:
+      - postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gitea.rule=Host(`git.localhost`)"
+      - "traefik.http.routers.gitea.entrypoints=websecure"
+      - "traefik.http.routers.gitea.tls.certresolver=local"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+
+  drone:
+    image: drone/drone:latest
+    container_name: sv-drone
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./drone:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DRONE_GITEA_SERVER=http://gitea:3000
+      - DRONE_GITEA_CLIENT_ID_FILE=/run/secrets/drone_gitea_client_id
+      - DRONE_GITEA_CLIENT_SECRET_FILE=/run/secrets/drone_gitea_client_secret
+      - DRONE_RPC_SECRET_FILE=/run/secrets/drone_rpc_secret
+      - DRONE_SERVER_HOST=ci.localhost
+      - DRONE_SERVER_PROTO=https
+      - DRONE_TLS_AUTOCERT=false
+    secrets:
+      - drone_gitea_client_id
+      - drone_gitea_client_secret
+      - drone_rpc_secret
+    depends_on:
+      - gitea
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.drone.rule=Host(`ci.localhost`)"
+      - "traefik.http.routers.drone.entrypoints=websecure"
+      - "traefik.http.routers.drone.tls.certresolver=local"
+      - "traefik.http.services.drone.loadbalancer.server.port=80"
+
+  drone-runner:
+    image: drone/drone-runner-docker:latest
+    container_name: sv-drone-runner
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DRONE_RPC_PROTO=http
+      - DRONE_RPC_HOST=drone:80
+      - DRONE_RPC_SECRET_FILE=/run/secrets/drone_rpc_secret
+      - DRONE_RUNNER_CAPACITY=2
+      - DRONE_RUNNER_NAME=local-runner
+    secrets:
+      - drone_rpc_secret
+    depends_on:
+      - drone
+
+  # ============================================================
+  # DATA LAYER
+  # ============================================================
+  
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: sv-postgres
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    environment:
+      - POSTGRES_USER=social_video
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_DB=social_video
+    secrets:
+      - postgres_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U social_video -d social_video"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis/redis-stack:latest
+    container_name: sv-redis
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./redis:/data
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: sv-minio
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./minio:/data
+    environment:
+      - MINIO_ROOT_USER_FILE=/run/secrets/minio_user
+      - MINIO_ROOT_PASSWORD_FILE=/run/secrets/minio_password
+    secrets:
+      - minio_user
+      - minio_password
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio.rule=Host(`minio.localhost`)"
+      - "traefik.http.routers.minio.entrypoints=websecure"
+      - "traefik.http.routers.minio.tls.certresolver=local"
+      - "traefik.http.services.minio.loadbalancer.server.port=9001"
+
+  # ============================================================
+  # AI LAYER
+  # ============================================================
+  
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sv-ollama
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  intelligence-worker:
+    build:
+      context: ./workers/intelligence
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://social_video:${POSTGRES_PASSWORD}@postgres:5432/social_video
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - RABBITMQ_URL=amqp://postal:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - OPENAI_API_KEY_FILE=/run/secrets/openai_api_key
+      - TRENDS_WORKER_URL=http://trends-worker:3007
+      - LOG_LEVEL=info
+    secrets:
+      - openai_api_key
+      - rabbitmq_password
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - ollama
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  # ============================================================
+  # PROCESSING LAYER
+  # ============================================================
+  
+  ffmpeg-worker:
+    build:
+      context: ./workers/ffmpeg
+      dockerfile: Dockerfile
+    container_name: sv-ffmpeg-worker
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./media:/media
+    environment:
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY_FILE=/run/secrets/minio_user
+      - MINIO_SECRET_KEY_FILE=/run/secrets/minio_password
+      - MINIO_BUCKET=videos
+    secrets:
+      - minio_user
+      - minio_password
+    depends_on:
+      - redis
+      - minio
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  mirror-worker:
+    build:
+      context: ./workers/mirror
+      dockerfile: Dockerfile
+    container_name: sv-mirror-worker
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://social_video:${POSTGRES_PASSWORD}@postgres:5432/social_video
+      - RABBITMQ_URL=amqp://postal:${RABBITMQ_PASSWORD}@rabbitmq:5672
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY_FILE=/run/secrets/minio_user
+      - MINIO_SECRET_KEY_FILE=/run/secrets/minio_password
+      - MINIO_BUCKET=videos
+      - MIRROR_BUCKET=social-video-mirror
+      - MIRROR_ENCRYPTION_KEY_FILE=/run/secrets/mirror_encryption_key
+      - LOG_LEVEL=info
+    secrets:
+      - minio_user
+      - minio_password
+      - mirror_encryption_key
+      - rabbitmq_password
+    depends_on:
+      - postgres
+      - minio
+      - rabbitmq
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ============================================================
+  # APPLICATION LAYER
+  # ============================================================
+  
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: sv-web
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://social_video:${POSTGRES_PASSWORD}@postgres:5432/social_video
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - NEXTAUTH_SECRET_FILE=/run/secrets/nextauth_secret
+      - NEXTAUTH_URL=https://app.localhost
+      - NEXT_PUBLIC_API_URL=https://api.localhost
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY_FILE=/run/secrets/minio_user
+      - MINIO_SECRET_KEY_FILE=/run/secrets/minio_password
+      - MINIO_BUCKET=videos
+      - OLLAMA_HOST=http://ollama:11434
+    secrets:
+      - nextauth_secret
+      - minio_user
+      - minio_password
+    depends_on:
+      - postgres
+      - redis
+      - minio
+      - ollama
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.web.rule=Host(`app.localhost`)"
+      - "traefik.http.routers.web.entrypoints=websecure"
+      - "traefik.http.routers.web.tls.certresolver=local"
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
+      - "traefik.http.routers.web.middlewares=authelia@docker"
+
+  api:
+    build:
+      context: ./apps/api-gateway
+      dockerfile: Dockerfile
+    container_name: sv-api
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://social_video:${POSTGRES_PASSWORD}@postgres:5432/social_video
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - JWT_SECRET_FILE=/run/secrets/jwt_secret
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY_FILE=/run/secrets/minio_user
+      - MINIO_SECRET_KEY_FILE=/run/secrets/minio_password
+      - MINIO_BUCKET=videos
+      - OLLAMA_HOST=http://ollama:11434
+      - PLATFORM_TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - PLATFORM_TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+      - PLATFORM_INSTAGRAM_CLIENT_ID=${INSTAGRAM_CLIENT_ID}
+      - PLATFORM_INSTAGRAM_CLIENT_SECRET=${INSTAGRAM_CLIENT_SECRET}
+      - PLATFORM_YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
+      - PLATFORM_YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
+      - PLATFORM_FACEBOOK_APP_ID=${FACEBOOK_APP_ID}
+      - PLATFORM_FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET}
+      - PLATFORM_X_CLIENT_ID=${X_CLIENT_ID}
+      - PLATFORM_X_CLIENT_SECRET=${X_CLIENT_SECRET}
+      - PLATFORM_LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID}
+      - PLATFORM_LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
+    secrets:
+      - jwt_secret
+      - minio_user
+      - minio_password
+    depends_on:
+      - postgres
+      - redis
+      - minio
+      - ollama
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`api.localhost`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=local"
+      - "traefik.http.services.api.loadbalancer.server.port=3001"
+      - "traefik.http.routers.api.middlewares=authelia@docker"
+
+# worker & scheduler services would be added here when apps/worker and apps/scheduler are created
+# For now, the processor worker handles background jobs
+
+  # ============================================================
+  # OBSERVABILITY LAYER
+  # ============================================================
+  
+  posthog:
+    image: posthog/posthog:latest
+    container_name: sv-posthog
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./posthog:/data
+    environment:
+      - POSTHOG_SECRET_KEY_FILE=/run/secrets/posthog_secret
+      - POSTHOG_DISABLE_SECURE_SSL_REDIRECT=true
+      - POSTHOG_ALLOWED_HOSTS=posthog.localhost
+    secrets:
+      - posthog_secret
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.posthog.rule=Host(`posthog.localhost`)"
+      - "traefik.http.routers.posthog.entrypoints=websecure"
+      - "traefik.http.routers.posthog.tls.certresolver=local"
+      - "traefik.http.services.posthog.loadbalancer.server.port=8000"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sv-prometheus
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls.certresolver=local"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: sv-grafana
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./grafana:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD_FILE=/run/secrets/grafana_password
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    secrets:
+      - grafana_password
+    depends_on:
+      - prometheus
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.localhost`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=local"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  loki:
+    image: grafana/loki:latest
+    container_name: sv-loki
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./loki:/loki
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: sv-tempo
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./tempo:/tempo
+      - ./tempo/tempo-config.yml:/etc/tempo/tempo.yaml:ro
+    command: -config.file=/etc/tempo/tempo.yaml
+
+  # ============================================================
+  # EMAIL LAYER
+  # ============================================================
+  
+  postal:
+    image: ghcr.io/postalserver/postal:latest
+    container_name: sv-postal
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./postal:/opt/postal/config
+    environment:
+      - POSTAL_DATABASE_HOST=postgres
+      - POSTAL_DATABASE_PORT=5432
+      - POSTAL_DATABASE_USERNAME=postal
+      - POSTAL_DATABASE_PASSWORD_FILE=/run/secrets/postal_db_password
+      - POSTAL_DATABASE_NAME=postal
+      - POSTAL_RABBITMQ_HOST=rabbitmq
+      - POSTAL_RABBITMQ_PORT=5672
+      - POSTAL_RABBITMQ_USERNAME=postal
+      - POSTAL_RABBITMQ_PASSWORD_FILE=/run/secrets/postal_rabbitmq_password
+      - POSTAL_SMTP_SERVER_HOST=0.0.0.0
+      - POSTAL_SMTP_SERVER_PORT=25
+      - POSTAL_WEB_SERVER_HOST=0.0.0.0
+      - POSTAL_WEB_SERVER_PORT=5000
+    secrets:
+      - postal_db_password
+      - postal_rabbitmq_password
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: sv-rabbitmq
+    restart: unless-stopped
+    networks:
+      - sv-internal
+    volumes:
+      - ./rabbitmq:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    secrets:
+      - rabbitmq_password
+
+networks:
+  sv-internal:
+    driver: bridge
+    internal: false
+  sv-public:
+    driver: bridge
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  gitea_db_password:
+    file: ./secrets/gitea_db_password.txt
+  drone_gitea_client_id:
+    file: ./secrets/drone_gitea_client_id.txt
+  drone_gitea_client_secret:
+    file: ./secrets/drone_gitea_client_secret.txt
+  drone_rpc_secret:
+    file: ./secrets/drone_rpc_secret.txt
+  minio_user:
+    file: ./secrets/minio_user.txt
+  minio_password:
+    file: ./secrets/minio_password.txt
+  nextauth_secret:
+    file: ./secrets/nextauth_secret.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  posthog_secret:
+    file: ./secrets/posthog_secret.txt
+  grafana_password:
+    file: ./secrets/grafana_password.txt
+  postal_db_password:
+    file: ./secrets/postal_db_password.txt
+  postal_rabbitmq_password:
+    file: ./secrets/postal_rabbitmq_password.txt
+  rabbitmq_password:
+    file: ./secrets/rabbitmq_password.txt
+  openai_api_key:
+    file: ./secrets/openai_api_key.txt
+  mirror_encryption_key:
+    file: ./secrets/mirror_encryption_key.txt

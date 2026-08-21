@@ -1,0 +1,34 @@
+{
+  "name": "@social-video/processor-worker",
+  "version": "1.0.0",
+  "description": "Video processing and platform publishing worker",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "vitest run",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "bullmq": "^5.8.0",
+    "ioredis": "^5.4.1",
+    "pg": "^8.12.0",
+    "pino": "^9.2.0",
+    "pino-pretty": "^11.2.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "axios": "^1.7.2",
+    "form-data": "^4.0.0",
+    "zod": "^3.23.8",
+    "crypto-js": "^4.2.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "eslint": "^9.5.0",
+    "@types/node": "^20.14.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

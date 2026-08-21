@@ -1,0 +1,21 @@
+# Dependencies  
+node_modules/  
+dist/  
+.next/  
+__pycache__/  
+*.log  
+.env  
+.env.local  
+.env.*.local  
+secrets/  
+postgres/  
+minio/  
+redis/  
+rabbitmq/  
+ollama/  
+authelia/  
+traefik/  
+*.pid  
+*.lock  
+.DS_Store  
+Thumbs.db 

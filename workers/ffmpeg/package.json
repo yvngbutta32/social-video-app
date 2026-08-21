@@ -1,0 +1,30 @@
+{
+  "name": "@social-video/ffmpeg-worker",
+  "version": "1.0.0",
+  "description": "FFmpeg video processing worker for social media variants",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "vitest run",
+    "health": "node src/health.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "minio": "^8.0.1",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1",
+    "pino": "^9.0.0",
+    "pino-pretty": "^11.0.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "sharp": "^0.33.3",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.5.0",
+    "@types/node": "^20.12.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
