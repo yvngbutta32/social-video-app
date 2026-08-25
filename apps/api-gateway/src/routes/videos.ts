@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
+import { assertPublishingAllowed } from '../lib/pilot-access.js';
 
 const videoSchema = z.object({
   title: z.string().min(1).max(200),
@@ -261,6 +262,8 @@ export function createVideoRoutes() {
     if (!workspaceMember) {
       throw new HTTPException(403, { message: 'No workspace access' });
     }
+
+    await assertPublishingAllowed(workspaceMember.workspaceId);
     
     const video = await prisma.video.findFirst({
       where: { id, workspaceId: workspaceMember.workspaceId },

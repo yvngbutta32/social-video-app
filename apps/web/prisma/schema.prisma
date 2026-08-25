@@ -55,6 +55,7 @@ model Workspace {
   subscriptions   Subscription[]
   videos          Video[]
   members         WorkspaceMember[]
+  pilotInvites    InviteCode[]
   owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
 
   @@index([ownerId])
@@ -448,6 +449,7 @@ model InviteCode {
   id          String       @id @default(uuid())
   code        String       @unique @default(cuid())
   email       String
+  workspaceId String?      @map("workspace_id")
   role        UserRole     @default(creator)
   status      InviteStatus @default(PENDING)
   expiresAt   DateTime
@@ -459,8 +461,10 @@ model InviteCode {
   usedAt      DateTime?
   createdBy   User         @relation("InviteCreatedBy", fields: [createdById], references: [id])
   usedBy      User?        @relation("InviteUsedBy", fields: [usedById], references: [id])
+  workspace   Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([email])
+  @@index([workspaceId])
   @@index([status])
   @@map("invite_codes")
 }

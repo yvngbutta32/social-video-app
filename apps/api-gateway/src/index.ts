@@ -16,6 +16,7 @@ import { createAnalyticsRoutes } from './routes/analytics.js';
 import { createAuthRoutes } from './routes/auth.js';
 import { createWebhookRoutes } from './routes/webhooks.js';
 import { createIntelligenceRoutes } from './routes/intelligence.js';
+import { createOwnerRoutes } from './routes/owner.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
 
@@ -56,7 +57,8 @@ app.get('/ready', async (c) => {
 });
 
 const authMiddleware = jwt({
-  secret: (c) => c.env.JWT_SECRET,
+  secret: (c: any) => c.env.JWT_SECRET,
+  alg: 'HS256',
 });
 
 app.use('/api/v1/*', authMiddleware, async (c, next) => {
@@ -79,6 +81,7 @@ app.route('/api/v1/accounts', createAccountRoutes());
 app.route('/api/v1/analytics', createAnalyticsRoutes());
 app.route('/api/v1/webhooks', createWebhookRoutes());
 app.route('/api/v1/intelligence', createIntelligenceRoutes());
+app.route('/api/v1/owner', createOwnerRoutes());
 
 app.onError((err, c) => {
   log.error({ err }, 'Unhandled error');

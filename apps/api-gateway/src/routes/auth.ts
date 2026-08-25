@@ -12,6 +12,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
   name: z.string().min(1).max(100),
+  inviteCode: z.string().min(8).max(128),
   company: z.string().max(200).optional(),
 });
 
@@ -39,63 +40,113 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+const refreshTokenLifetimeSeconds = 60 * 60 * 24 * 30;
+
+function createRefreshToken(userId: string, secret: string) {
+  return sign(
+    { sub: userId, type: 'refresh', exp: Math.floor(Date.now() / 1000) + refreshTokenLifetimeSeconds },
+    secret,
+    'HS256'
+  );
+}
+
 export function createAuthRoutes() {
   const app = new Hono<{ Variables: Variables }>();
 
   app.post('/register', zValidator('json', registerSchema), async (c: any) => {
     const body = c.req.valid('json');
     
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: body.email },
+    const normalizedEmail = body.email.trim().toLowerCase();
+    const invite = await prisma.inviteCode.findUnique({
+      where: { code: body.inviteCode },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        expiresAt: true,
+        maxUses: true,
+        usedCount: true,
+        workspaceId: true,
+      },
     });
-    
+
+    if (
+      !invite ||
+      invite.status !== 'PENDING' ||
+      invite.email.trim().toLowerCase() !== normalizedEmail ||
+      invite.expiresAt <= new Date() ||
+      invite.usedCount >= invite.maxUses ||
+      !invite.workspaceId
+    ) {
+      throw new HTTPException(403, { message: 'A valid pilot invitation is required' });
+    }
+
+    const [existingUser, workspace] = await Promise.all([
+      prisma.user.findUnique({ where: { email: normalizedEmail } }),
+      prisma.workspace.findUnique({ where: { id: invite.workspaceId }, select: { id: true, settings: true } }),
+    ]);
+
     if (existingUser) {
       throw new HTTPException(409, { message: 'Email already registered' });
     }
-    
-    // Hash password
+
+    if (!workspace) {
+      throw new HTTPException(409, { message: 'This pilot invitation no longer has an active workspace' });
+    }
+
     const hashedPassword = await bcrypt.hash(body.password, 12);
-    
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: body.email,
-        passwordHash: hashedPassword,
-        name: body.name,
-      },
+    const workspaceRole = invite.role === 'creator' ? 'owner' : invite.role;
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash: hashedPassword,
+          name: body.name,
+          role: invite.role,
+        },
+      });
+
+      await tx.workspaceMember.create({
+        data: {
+          workspaceId: workspace.id,
+          userId: createdUser.id,
+          role: workspaceRole,
+          joinedAt: new Date(),
+        },
+      });
+
+      await tx.workspace.update({
+        where: { id: workspace.id },
+        data: {
+          settings: {
+            ...((workspace.settings as Record<string, unknown>) || {}),
+            pilotStatus: 'active',
+            publishingPaused: false,
+            activatedAt: new Date().toISOString(),
+          },
+        },
+      });
+
+      await tx.inviteCode.update({
+        where: { id: invite.id },
+        data: {
+          status: 'USED',
+          usedById: createdUser.id,
+          usedAt: new Date(),
+          usedCount: { increment: 1 },
+        },
+      });
+
+      return createdUser;
     });
-    
-    // Create default workspace for user
-    const workspace = await prisma.workspace.create({
-      data: {
-        name: `${user.name || user.email}'s Workspace`,
-        slug: `${user.email.split('@')[0]}-${Date.now()}`,
-        ownerId: user.id,
-      },
-    });
-    
-    // Add user as owner of workspace
-    await prisma.workspaceMember.create({
-      data: {
-        workspaceId: workspace.id,
-        userId: user.id,
-        role: 'owner',
-        joinedAt: new Date(),
-      },
-    });
-    
+
     const accessToken = await sign(
-      { sub: user.id, email: user.email, role: 'owner' },
+      { sub: user.id, email: user.email, role: user.role },
       c.env.JWT_SECRET,
       'HS256'
     );
-    const refreshToken = await sign(
-      { sub: user.id, type: 'refresh' },
-      c.env.JWT_SECRET,
-      'HS256',
-      60 * 60 * 24 * 30
-    );
+    const refreshToken = await createRefreshToken(user.id, c.env.JWT_SECRET);
     
     setCookie(c, 'refreshToken', refreshToken, {
       httpOnly: true,
@@ -107,10 +158,10 @@ export function createAuthRoutes() {
     
     return c.json({ 
       data: { 
-        user: { id: user.id, email: user.email, name: user.name },
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, workspaceId: workspace.id },
         accessToken 
       },
-      message: 'Registration successful'
+      message: 'Pilot registration successful'
     }, 201);
   });
 
@@ -122,7 +173,7 @@ export function createAuthRoutes() {
       where: { email: body.email },
     });
     
-    if (!user) {
+    if (!user || !user.isActive) {
       throw new HTTPException(401, { message: 'Invalid credentials' });
     }
     
@@ -133,23 +184,12 @@ export function createAuthRoutes() {
       throw new HTTPException(401, { message: 'Invalid credentials' });
     }
     
-    // Get user's workspace membership
-    const membership = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true, role: true },
-    });
-    
     const accessToken = await sign(
-      { sub: user.id, email: user.email, role: membership?.role || 'viewer' },
+      { sub: user.id, email: user.email, role: user.role },
       c.env.JWT_SECRET,
       'HS256'
     );
-    const refreshToken = await sign(
-      { sub: user.id, type: 'refresh' },
-      c.env.JWT_SECRET,
-      'HS256',
-      60 * 60 * 24 * 30
-    );
+    const refreshToken = await createRefreshToken(user.id, c.env.JWT_SECRET);
     
     setCookie(c, 'refreshToken', refreshToken, {
       httpOnly: true,
@@ -183,7 +223,7 @@ export function createAuthRoutes() {
     const { refreshToken } = c.req.valid('json');
     
     try {
-      const payload = await verify(refreshToken, c.env.JWT_SECRET);
+      const payload = await verify(refreshToken, c.env.JWT_SECRET, 'HS256');
       if (payload.type !== 'refresh') {
         throw new HTTPException(401, { message: 'Invalid token type' });
       }
@@ -196,22 +236,12 @@ export function createAuthRoutes() {
         throw new HTTPException(401, { message: 'User not found' });
       }
       
-      const membership = await prisma.workspaceMember.findFirst({
-        where: { userId: user.id },
-        select: { role: true },
-      });
-      
       const accessToken = await sign(
-        { sub: user.id, email: user.email, role: membership?.role || 'viewer' },
+        { sub: user.id, email: user.email, role: user.role },
         c.env.JWT_SECRET,
         'HS256'
       );
-      const newRefreshToken = await sign(
-        { sub: user.id, type: 'refresh' },
-        c.env.JWT_SECRET,
-        'HS256',
-        60 * 60 * 24 * 30
-      );
+      const newRefreshToken = await createRefreshToken(user.id, c.env.JWT_SECRET);
       
       setCookie(c, 'refreshToken', newRefreshToken, {
         httpOnly: true,
@@ -289,10 +319,12 @@ export function createAuthRoutes() {
         locale: true,
         createdAt: true,
         lastLoginAt: true,
+        role: true,
         workspaces: {
-          include: {
+          select: {
+            role: true,
             workspace: {
-              select: { id: true, name: true, slug: true, plan: true },
+              select: { id: true, name: true, slug: true, plan: true, settings: true },
             },
           },
         },
