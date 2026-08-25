@@ -72,6 +72,15 @@ export type Readiness = {
   safeguards: string[];
 };
 
+export type ReachPlan = {
+  sourceTitle: string;
+  objective: string;
+  platforms: string[];
+  activeDestinations: number;
+  steps: Array<{ id: string; sequence: number; type: string; title: string; action: string; purpose: string; checkpoint: string }>;
+  safeguards: string[];
+};
+
 export type LearningSignal = {
   decision: 'continue_collecting' | 'retain_and_retest' | 'revise_hypothesis' | 'inconclusive';
   confidence: 'low' | 'moderate' | 'high';

@@ -14,6 +14,7 @@ import {
 import { requireWorkspaceAccess } from '../lib/pilot-access.js';
 import { evaluateLearningSignal } from '../lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
+import { buildReachPlan } from '../lib/reach-plan.js';
 
 const sourceSchema = z.object({
   videoId: z.string().uuid(),
@@ -176,6 +177,20 @@ export function createGrowthRoutes() {
         ],
       },
     });
+  });
+
+  app.post('/reach-plan', zValidator('json', planSchema), async (c: any) => {
+    const actor = c.get('user');
+    const input = c.req.valid('json');
+    const video = await prisma.video.findUnique({
+      where: { id: input.videoId },
+      select: { id: true, workspaceId: true, title: true, status: true },
+    });
+    if (!video) throw new HTTPException(404, { message: 'Source video not found' });
+    await requireWorkspaceAccess(actor, video.workspaceId);
+    if (video.status !== 'ready') throw new HTTPException(409, { message: 'Source video must finish processing before a reach plan can be prepared' });
+    const activeDestinations = await prisma.socialAccount.count({ where: { workspaceId: video.workspaceId, platform: { in: input.platforms }, isActive: true } });
+    return c.json({ data: buildReachPlan({ sourceTitle: video.title, platforms: input.platforms as ('tiktok' | 'instagram' | 'youtube')[], objective: input.objective as GrowthObjective, activeDestinations }) });
   });
 
   app.get('/readiness/:videoId', async (c: any) => {

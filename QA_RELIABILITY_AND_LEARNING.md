@@ -59,3 +59,11 @@ Private source uploads now dispatch a deterministic BullMQ `video-processing` jo
 The processor bootstrap now reads its actual worker configuration shape, and source retrieval uses the canonical `minio_object_key` and persisted bucket rather than the obsolete `s3_key` field. Growth Studio polls the authenticated source record while processing is pending and unlocks live fingerprinting only after the source status becomes `ready`.
 
 API and web type-checks/builds, Growth Studio contract tests, and processor JavaScript syntax checks passed. Runtime validation of Redis, MinIO, PostgreSQL, FFmpeg, and the BullMQ worker remains gated on a Docker-capable persistent deployment target; this sandbox has no Docker runtime.
+
+## Compliant organic amplification checkpoint
+
+Growth Studio now exposes a server-generated reach architecture for ready creator sources. The plan sequences a creator-authorized native seed, approved cross-platform adaptations, voluntary share and conversation surfaces, an optional creator-approved collaboration brief, and an evidence checkpoint. Each step states its purpose and the measurement checkpoint so distribution is treated as a testable operating loop rather than an impression promise.
+
+The plan explicitly separates planned distribution, confirmed delivery, and observed performance. It does not purchase reach, create fake engagement, use unauthorized access, spam communities, or claim control over recommendation ranking. Official platform capabilities remain a creator-authorized execution boundary; current research is recorded in `PLATFORM_AMPLIFICATION_RESEARCH.md`.
+
+The reach-plan contract, API type-check/build, and web type-check/build passed.

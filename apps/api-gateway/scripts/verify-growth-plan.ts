@@ -4,6 +4,7 @@ import { buildGrowthExperimentPlan } from '../src/lib/growth-plan.js';
 import { evaluateLearningSignal } from '../src/lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness, decideRetry } from '../src/lib/reliability.js';
 import { createAttemptIdempotencyKey, resolvePublishAttemptOutcome, validateCreatorApproval } from '../src/lib/publishing-lifecycle.js';
+import { buildReachPlan } from '../src/lib/reach-plan.js';
 
 async function main() {
   const plan = buildGrowthExperimentPlan({
@@ -16,6 +17,11 @@ async function main() {
   assert.equal(plan.length, 3);
   assert.deepEqual(plan.map((experiment) => experiment.platform), ['tiktok', 'instagram', 'youtube']);
   assert.equal(new Set(plan.map((experiment) => experiment.platform)).size, plan.length);
+
+  const reachPlan = buildReachPlan({ sourceTitle: 'Source', platforms: ['tiktok', 'instagram', 'youtube'], objective: 'retention', activeDestinations: 2 });
+  assert.deepEqual(reachPlan.steps.map((step) => step.type), ['creator_authorized_publish', 'authorized_cross_platform', 'creator_owned_share_loop', 'creator_approved_collaboration', 'evidence_checkpoint']);
+  assert(reachPlan.safeguards.some((guardrail) => /fake engagement/i.test(guardrail)));
+  assert(reachPlan.safeguards.some((guardrail) => /not guaranteed reach/i.test(guardrail)));
   assert(plan.every((experiment) => experiment.hook.length > 0));
   assert(plan.every((experiment) => experiment.changes.length >= 3));
   assert(plan.every((experiment) => experiment.safeguards.some((guardrail) => /not a guarantee/i.test(guardrail))));
@@ -121,6 +127,8 @@ async function main() {
   assert.match(growthRoute, /evaluateLearningSignal/);
   assert.match(growthRoute, /readiness/);
   assert.match(growthRoute, /assessCreatorWorkflowReadiness/);
+  assert.match(growthRoute, /reach-plan/);
+  assert.match(growthRoute, /buildReachPlan/);
 
   const publishingRoute = await readFile(new URL('../src/routes/publishing.ts', import.meta.url), 'utf8');
   assert.match(publishingRoute, /Platform oversight is read-only/);
