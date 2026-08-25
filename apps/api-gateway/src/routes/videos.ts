@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
 import { assertPublishingAllowed } from '../lib/pilot-access.js';
 import { uploadSource } from '../lib/source-storage.js';
+import { enqueueVideoProcessing } from '../lib/processing-dispatch.js';
 
 const videoSchema = z.object({
   title: z.string().min(1).max(200),
@@ -154,11 +155,19 @@ export function createVideoRoutes() {
       select: { id: true, title: true, originalFilename: true, status: true, fileSizeBytes: true, createdAt: true },
     });
 
-    return c.json({
-      data: { ...video, fileSizeBytes: video.fileSizeBytes?.toString() ?? null },
-      nextStep: 'processing_required',
-      message: 'Source stored privately in the creator workspace. Video processing must complete before live fingerprinting or experiment planning.',
-    }, 201);
+    try {
+      const processing = await enqueueVideoProcessing(video.id);
+      await prisma.video.update({ where: { id: video.id }, data: { metadata: { sourceType: 'creator-upload', processingState: 'queued', processingJobId: processing.jobId, processingQueuedAt: new Date().toISOString() } } });
+      return c.json({
+        data: { ...video, status: 'uploading', fileSizeBytes: video.fileSizeBytes?.toString() ?? null },
+        processing,
+        nextStep: 'processing_queued',
+        message: 'Source stored privately in the creator workspace and queued for local processing. Live fingerprinting unlocks after processing reports ready.',
+      }, 201);
+    } catch (error) {
+      await prisma.video.update({ where: { id: video.id }, data: { metadata: { sourceType: 'creator-upload', processingState: 'dispatch_failed', processingError: error instanceof Error ? error.message : 'Processing dispatch failed' } } }).catch(() => undefined);
+      throw new HTTPException(503, { message: 'Source was stored privately, but local processing could not be queued. Retry from the creator workspace.' });
+    }
   });
 
   app.get('/:id', async (c: any) => {

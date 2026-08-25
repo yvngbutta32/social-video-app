@@ -96,9 +96,9 @@ export async function abortMultipart(key, uploadId) {
   await s3Client.send(command);
 }
 
-export async function downloadFile(key) {
+export async function downloadFile(key, bucket = BUCKET) {
   const command = new GetObjectCommand({
-    Bucket: BUCKET,
+    Bucket: bucket,
     Key: key,
   });
   

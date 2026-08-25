@@ -584,9 +584,9 @@ export async function processVideoJob(job, deps) {
     await updateVideoStatus(videoId, 'processing', { startedAt: new Date().toISOString() });
     
     // Download original video from MinIO
-    const originalStream = await downloadFile(video.s3_key);
+    const originalStream = await downloadFile(video.minio_object_key, video.minio_bucket);
     if (!originalStream) {
-      throw new Error(`Failed to download video ${video.s3_key}`);
+      throw new Error(`Failed to download video ${video.minio_object_key}`);
     }
     
     // Save to temp file

@@ -51,3 +51,11 @@ Growth Studio’s file chooser now uploads authenticated creator files to `POST 
 Storage credentials are read from deployment environment variables or Docker secret files and are never returned to the browser. The source key includes the workspace boundary and a generated identifier rather than a user-controlled path. The API and web type-checks, source-intake contract assertions, and production builds passed.
 
 The source-processing worker still needs to be connected to the queued record on a Docker-capable persistent deployment target. Until that worker is deployed and tested, a newly uploaded source correctly remains processing-pending rather than being falsely presented as analysis-ready.
+
+## Queued source processing checkpoint
+
+Private source uploads now dispatch a deterministic BullMQ `video-processing` job keyed by the video ID. The dispatcher uses bounded attempts and exponential backoff, while the API records `processingJobId`, queue time, and dispatch failures in the workspace-scoped video metadata. Repeated requests for the same video cannot create a second processing job ID.
+
+The processor bootstrap now reads its actual worker configuration shape, and source retrieval uses the canonical `minio_object_key` and persisted bucket rather than the obsolete `s3_key` field. Growth Studio polls the authenticated source record while processing is pending and unlocks live fingerprinting only after the source status becomes `ready`.
+
+API and web type-checks/builds, Growth Studio contract tests, and processor JavaScript syntax checks passed. Runtime validation of Redis, MinIO, PostgreSQL, FFmpeg, and the BullMQ worker remains gated on a Docker-capable persistent deployment target; this sandbox has no Docker runtime.

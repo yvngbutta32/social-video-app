@@ -132,14 +132,27 @@ async function main() {
   assert.match(videoRoute, /app\.post\('\/upload'/);
   assert.match(videoRoute, /No creator workspace access/);
   assert.match(videoRoute, /Only MP4, MOV, WebM, and M4V/);
-  assert.match(videoRoute, /processing_required/);
+  assert.match(videoRoute, /processing_queued/);
   assert.match(videoRoute, /uploadSource/);
+
+  const dispatchAdapter = await readFile(new URL('../src/lib/processing-dispatch.ts', import.meta.url), 'utf8');
+  assert.match(dispatchAdapter, /video-processing:\$\{videoId\}/);
+  assert.match(dispatchAdapter, /attempts: 3/);
+  assert.match(dispatchAdapter, /backoff: \{ type: 'exponential'/);
 
   const storageAdapter = await readFile(new URL('../src/lib/source-storage.ts', import.meta.url), 'utf8');
   assert.match(storageAdapter, /workspaces\/\$\{workspaceId\}\/sources/);
   assert.match(storageAdapter, /Metadata: \{ workspaceId/);
   assert.match(storageAdapter, /MINIO_ACCESS_KEY_FILE/);
   assert.match(storageAdapter, /forcePathStyle: true/);
+
+  const processorEntrypoint = await readFile(new URL('../../../workers/processor/src/index.js', import.meta.url), 'utf8');
+  assert.match(processorEntrypoint, /config\.workers\.videoConcurrency/);
+  assert.match(processorEntrypoint, /video-processing/);
+  const processorImplementation = await readFile(new URL('../../../workers/processor/src/processor.js', import.meta.url), 'utf8');
+  assert.match(processorImplementation, /video\.minio_object_key/);
+  const processorStorage = await readFile(new URL('../../../workers/processor/src/minio.js', import.meta.url), 'utf8');
+  assert.match(processorStorage, /downloadFile\(key, bucket = BUCKET\)/);
 
   const lifecycleMigration = await readFile(new URL('../../web/prisma/migrations/4_creator_publish_lifecycle/migration.sql', import.meta.url), 'utf8');
   assert.match(lifecycleMigration, /publishing_attempts/);

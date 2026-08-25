@@ -59,7 +59,7 @@ new Worker('video-processing', async (job) => {
   }
 }, { 
   connection: redis,
-  concurrency: config.worker.concurrency || 2,
+  concurrency: config.workers.videoConcurrency || 2,
   limiter: { max: 10, duration: 60000 },
 });
 
@@ -77,7 +77,7 @@ new Worker('video-publishing', async (job) => {
   }
 }, { 
   connection: redis,
-  concurrency: config.worker.concurrency || 3,
+  concurrency: config.workers.publishConcurrency || 3,
   limiter: { max: 20, duration: 60000 },
 });
 
@@ -183,7 +183,7 @@ async function shutdown() {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-const PORT = config.worker.port || 3003;
+const PORT = config.healthPort || 3003;
 app.listen(PORT, () => {
   logger.info({ port: PORT }, 'Processor worker started');
   logger.info({ port: PORT }, `Bull Board available at http://localhost:${PORT}/admin/queues`);
