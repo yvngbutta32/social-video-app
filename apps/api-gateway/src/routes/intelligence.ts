@@ -165,10 +165,14 @@ export function createIntelligenceRoutes() {
       data: {
         workspaceId: workspaceMember.workspaceId,
         variantId: variant.id,
-        predictedViralScore: viralScore,
-        predictedViews,
-        predictedEngagementRate,
-        confidence,
+        prediction_type: 'viral_score',
+        predicted_value: viralScore,
+        confidence_interval: {
+          confidence,
+          predictedViews,
+          predictedEngagementRate,
+          predictedCompletionRate,
+        },
         modelVersion: 'heuristic-v1',
         features,
       },
@@ -333,6 +337,9 @@ export function createIntelligenceRoutes() {
           workspaceId: workspaceMember.workspaceId,
           niche: input.contentType,
           platform: input.platform,
+          name: `${hook.type} hook`,
+          text: hook.text,
+          type: hook.type,
           hookType: hook.type,
           hookText: hook.text,
           templateUsed: hook.type,
@@ -457,12 +464,23 @@ export function createIntelligenceRoutes() {
     const suggestion = await prisma.trendSuggestion.create({
       data: {
         workspaceId: workspaceMember.workspaceId,
-        trendSignalId: input.trendId,
-        suggestedHooks: concepts.flatMap(c => c.hookIdeas),
-        suggestedAngles: concepts.map(c => c.angle),
-        estimatedEffort: concepts[0]?.estimatedEffort || 'medium',
-        priorityScore: trend.compositeScore || 0.5,
-        status: 'pending',
+        source: trend.source as any,
+        source_id: trend.id,
+        title: concepts[0]?.title || `Concepts for ${trend.title || 'trend'}`,
+        description: concepts[0]?.description || null,
+        niche: input.brandNiche,
+        platform: input.platform as any,
+        keywords: concepts.flatMap((concept) => concept.hookIdeas).slice(0, 12),
+        viral_potential: trend.compositeScore ?? 0.5,
+        trend_velocity: trend.velocityScore ?? 0,
+        raw_data: {
+          trendSignalId: input.trendId,
+          suggestedHooks: concepts.flatMap((concept) => concept.hookIdeas),
+          suggestedAngles: concepts.map((concept) => concept.angle),
+          estimatedEffort: concepts[0]?.estimatedEffort || 'medium',
+          status: 'pending',
+        },
+        expires_at: trend.expiresAt,
       },
     });
     
@@ -484,7 +502,7 @@ export function createIntelligenceRoutes() {
         riskAssessment: {
           brandSafety: trend.brandSafetyScore || 0.8,
           saturationRisk: trend.competitionScore || 0.3,
-          recommendation: trend.compositeScore > 0.7 ? 'Act fast - trend peaking' : 'Monitor before investing',
+          recommendation: (trend.compositeScore ?? 0) > 0.7 ? 'Act fast - trend peaking' : 'Monitor before investing',
         },
       },
     });
@@ -599,7 +617,6 @@ export function createIntelligenceRoutes() {
     const patterns = await prisma.performancePattern.findMany({
       where: {
         workspaceId: workspaceMember.workspaceId,
-        platform: query.platform,
       },
       orderBy: { confidence: 'desc' },
       take: query.limit,
@@ -627,15 +644,20 @@ export function createIntelligenceRoutes() {
     
     return c.json({
       success: true,
-      data: patterns.map(p => ({
-        patternType: p.patternType,
-        patternValue: p.patternValue,
-        metricName: p.metricName,
-        metricValue: p.metricValue,
-        sampleSize: p.sampleSize,
-        confidence: p.confidence,
-        lastUpdated: p.lastUpdated.toISOString(),
-      })),
+      data: patterns.map((pattern) => {
+        const data = pattern.pattern_data && typeof pattern.pattern_data === 'object' && !Array.isArray(pattern.pattern_data)
+          ? pattern.pattern_data as Record<string, unknown>
+          : {};
+        return {
+          patternType: pattern.patternType,
+          patternValue: String(data.patternValue ?? ''),
+          metricName: String(data.metricName ?? 'views'),
+          metricValue: Number(data.metricValue ?? 0),
+          sampleSize: pattern.sample_size,
+          confidence: Number(pattern.confidence),
+          lastUpdated: pattern.discovered_at.toISOString(),
+        };
+      }),
     });
   });
 
@@ -741,8 +763,8 @@ export function createIntelligenceRoutes() {
     const audit = variants.map(v => {
       const latestMetric = v.scheduledPosts[0]?.metrics[0];
       const views = latestMetric ? Number(latestMetric.views) : 0;
-      const engagementRate = latestMetric && latestMetric.views > 0 
-        ? (Number(latestMetric.likes) + Number(latestMetric.comments) + Number(latestMetric.shares)) / Number(latestMetric.views)
+      const engagementRate = latestMetric && Number(latestMetric.views ?? 0) > 0 
+        ? (Number(latestMetric.likes ?? 0) + Number(latestMetric.comments ?? 0) + Number(latestMetric.shares ?? 0)) / Number(latestMetric.views ?? 0)
         : 0;
       
       const issues = [];
@@ -756,7 +778,8 @@ export function createIntelligenceRoutes() {
         issues.push('Caption too short or missing');
         recommendations.push('Write a detailed caption with call-to-action');
       }
-      if (!v.hashtags || v.hashtags.length < 3) {
+      const hashtagCount = Array.isArray(v.hashtags) ? v.hashtags.length : 0;
+      if (hashtagCount < 3) {
         issues.push('Insufficient hashtags');
         recommendations.push('Add 5-10 relevant hashtags');
       }

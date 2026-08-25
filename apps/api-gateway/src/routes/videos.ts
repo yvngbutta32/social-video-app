@@ -318,7 +318,7 @@ export function createVideoRoutes() {
         fileSizeBytes: video.fileSizeBytes,
         mimeType: video.mimeType,
         status: 'uploading',
-        metadata: video.metadata,
+        metadata: video.metadata as any,
       },
     });
     

@@ -152,15 +152,18 @@ export function createAnalyticsRoutes() {
       ORDER BY date ASC
     `;
     
+    const totals = metrics._sum ?? {};
+    const averages = metrics._avg ?? {};
+
     return c.json({
       data: {
         summary: {
-          totalImpressions: Number(metrics._sum.impressions || 0),
-          totalViews: Number(metrics._sum.views || 0),
-          totalEngagement: Number((metrics._sum.likes || 0) + (metrics._sum.comments || 0) + (metrics._sum.shares || 0)),
-          totalFollowers: Number(metrics._sum.followerGain || 0),
-          avgEngagementRate: Number(metrics._avg.engagementRate || 0),
-          avgCompletionRate: Number(metrics._avg.completionRate || 0),
+          totalImpressions: Number(totals.impressions ?? 0),
+          totalViews: Number(totals.views ?? 0),
+          totalEngagement: Number(totals.likes ?? 0) + Number(totals.comments ?? 0) + Number(totals.shares ?? 0),
+          totalFollowers: Number(totals.followerGain ?? 0),
+          avgEngagementRate: Number(averages.engagementRate ?? 0),
+          avgCompletionRate: Number(averages.completionRate ?? 0),
         },
         trends: trends as any[],
         topVideos: topVideos.map((v: any) => ({
@@ -224,7 +227,7 @@ export function createAnalyticsRoutes() {
       month: 'month',
     };
     
-    const trunc = truncMap[query.granularity];
+    const trunc = truncMap[query.granularity as keyof typeof truncMap];
     
     const data = await prisma.$queryRaw`
       SELECT 

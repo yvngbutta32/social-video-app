@@ -360,8 +360,8 @@ export function createAccountRoutes() {
           likes: Number(latestMetric.likes),
           comments: Number(latestMetric.comments),
           shares: Number(latestMetric.shares),
-          engagementRate: latestMetric.views > 0 
-            ? (Number(latestMetric.likes) + Number(latestMetric.comments) + Number(latestMetric.shares)) / Number(latestMetric.views)
+          engagementRate: Number(latestMetric.views ?? 0) > 0 
+            ? (Number(latestMetric.likes ?? 0) + Number(latestMetric.comments ?? 0) + Number(latestMetric.shares ?? 0)) / Number(latestMetric.views ?? 0)
             : 0,
         });
       }

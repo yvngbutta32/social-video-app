@@ -56,6 +56,8 @@ model Workspace {
   videos          Video[]
   members         WorkspaceMember[]
   pilotInvites    InviteCode[]
+  postMetrics     PostMetric[]
+  webhooks        Webhook[]
   owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
 
   @@index([ownerId])
@@ -97,11 +99,15 @@ model SocialAccount {
   tokenExpiresAt        DateTime?       @map("token_expires_at")
   metadata              Json            @default("{}")
   isActive              Boolean         @default(true) @map("is_active")
+  isBusinessAccount     Boolean         @default(false) @map("is_business_account")
+  followerCount         Int             @default(0) @map("follower_count")
   connectedAt           DateTime        @default(now()) @map("connected_at")
+  updatedAt             DateTime        @updatedAt @map("updated_at")
   lastSyncAt            DateTime?       @map("last_sync_at")
   platform              Platform
   scopes                Json            @default("[]")
   scheduledPosts        ScheduledPost[]
+  variants              VideoVariant[]  @relation("VariantSocialAccount")
   workspace             Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, platform, platformUserId])
@@ -170,7 +176,10 @@ model VideoVariant {
   platform           Platform
   hashtags           Json            @default("[]")
   status             VariantStatus   @default(pending)
+  socialAccountId    String?         @map("social_account_id")
   scheduledPosts     ScheduledPost[]
+  metrics            PostMetric[]
+  socialAccount      SocialAccount?  @relation("VariantSocialAccount", fields: [socialAccountId], references: [id], onDelete: SetNull)
   video              Video           @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@index([videoId])
@@ -183,20 +192,25 @@ model VideoVariant {
 }
 
 model Hook {
-  id          String    @id @default(uuid())
-  workspaceId String    @map("workspace_id")
-  videoId     String?   @map("video_id")
-  niche       String?
-  createdAt   DateTime  @default(now()) @map("created_at")
-  isActive    Boolean   @default(true) @map("is_active")
-  metadata    Json      @default("{}")
-  name        String
-  text        String
-  type        String
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  platform    Platform?
-  video       Video?    @relation(fields: [videoId], references: [id])
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id           String    @id @default(uuid())
+  workspaceId  String    @map("workspace_id")
+  videoId      String?   @map("video_id")
+  niche        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  isActive     Boolean   @default(true) @map("is_active")
+  metadata     Json      @default("{}")
+  name         String
+  text         String
+  type         String
+  hookType     String?   @map("hook_type")
+  hookText     String?   @map("hook_text")
+  templateUsed String?   @map("template_used")
+  aiModel      String?   @map("ai_model")
+  viralScore   Float?    @map("viral_score")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  platform     Platform?
+  video        Video?    @relation(fields: [videoId], references: [id])
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
   @@index([type])
@@ -224,6 +238,7 @@ model ScheduledPost {
   metadata        Json             @default("{}")
   platformUrl     String?          @map("platform_url")
   status          PostStatus       @default(draft)
+  metrics         PostMetric[]
   retentionCurves RetentionCurve[]
   abTest          ABTest?          @relation("ABTestVariants", fields: [abTestId], references: [id])
   socialAccount   SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
@@ -256,7 +271,9 @@ model ABTest {
   startedAt               DateTime        @default(now()) @map("started_at")
   completedAt             DateTime?       @map("completed_at")
   results                 Json            @default("{}")
-  status                  ABTestStatus    @default(running)
+  metadata                Json            @default("{}")
+  createdAt               DateTime        @default(now()) @map("created_at")
+  status                  ABTestStatus    @default(draft)
   workspace               Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   variants                ScheduledPost[] @relation("ABTestVariants")
 
@@ -268,25 +285,30 @@ model ABTest {
 }
 
 model PostMetric {
-  id               String   @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  scheduledPostId  String   @map("scheduled_post_id") @db.Uuid
-  workspaceId      String   @map("workspace_id") @db.Uuid
+  id               String        @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  scheduledPostId  String        @map("scheduled_post_id") @db.Uuid
+  workspaceId      String        @map("workspace_id") @db.Uuid
   platform         platform
-  recordedAt       DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
-  views            BigInt?  @default(0)
-  likes            BigInt?  @default(0)
-  comments         BigInt?  @default(0)
-  shares           BigInt?  @default(0)
-  saves            BigInt?  @default(0)
-  clicks           BigInt?  @default(0)
-  reach            BigInt?  @default(0)
-  impressions      BigInt?  @default(0)
-  watchTimeSeconds BigInt?  @default(0) @map("watch_time_seconds")
-  avgWatchTime     Decimal? @map("avg_watch_time") @db.Decimal(10, 2)
-  completionRate   Decimal? @map("completion_rate") @db.Decimal(5, 4)
-  followerGain     Int?     @default(0) @map("follower_gain")
-  profileVisits    BigInt?  @default(0) @map("profile_visits")
-  metadata         Json?    @default("{}")
+  recordedAt       DateTime      @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  views            BigInt?       @default(0)
+  likes            BigInt?       @default(0)
+  comments         BigInt?       @default(0)
+  shares           BigInt?       @default(0)
+  saves            BigInt?       @default(0)
+  clicks           BigInt?       @default(0)
+  reach            BigInt?       @default(0)
+  impressions      BigInt?       @default(0)
+  watchTimeSeconds BigInt?       @default(0) @map("watch_time_seconds")
+  avgWatchTime     Decimal?      @map("avg_watch_time") @db.Decimal(10, 2)
+  completionRate   Decimal?      @map("completion_rate") @db.Decimal(5, 4)
+  followerGain     Int?          @default(0) @map("follower_gain")
+  profileVisits    BigInt?       @default(0) @map("profile_visits")
+  engagementRate   Decimal?      @map("engagement_rate") @db.Decimal(8, 4)
+  metadata         Json?         @default("{}")
+  variantId        String?       @map("variant_id")
+  scheduledPost    ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+  variant          VideoVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@id([id, recordedAt])
   @@index([scheduledPostId, recordedAt(sort: Desc)])
@@ -445,6 +467,43 @@ model Subscription {
   @@map("subscriptions")
 }
 
+model Webhook {
+  id          String            @id @default(uuid())
+  workspaceId String            @map("workspace_id")
+  name        String
+  url         String
+  events      Json              @default("[]")
+  secret      String
+  isActive    Boolean           @default(true) @map("is_active")
+  retryPolicy Json              @default("{}") @map("retry_policy")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+  workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries  WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@index([isActive])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id             String   @id @default(uuid())
+  webhookId      String   @map("webhook_id")
+  event          String
+  payload        Json
+  responseStatus Int      @default(0) @map("response_status")
+  responseBody   String?  @map("response_body")
+  success        Boolean  @default(false)
+  retryCount     Int      @default(0) @map("retry_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  webhook        Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId, createdAt(sort: Desc)])
+  @@index([success])
+  @@map("webhook_deliveries")
+}
+
 model InviteCode {
   id          String       @id @default(uuid())
   code        String       @unique @default(cuid())
@@ -520,37 +579,37 @@ model ContentMirror {
 }
 
 model DeliveryConfig {
-  id          String              @id @default(uuid())
-  name        String              @unique
-  destination DeliveryDestination
-  config      Json
-  schedule    String
-  enabled     Boolean             @default(true)
-  lastRun     DateTime?           @map("last_run")
-  nextRun     DateTime?           @map("next_run")
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
+  id           String              @id @default(uuid())
+  name         String              @unique
+  destination  DeliveryDestination
+  config       Json
+  schedule     String
+  enabled      Boolean             @default(true)
+  lastRun      DateTime?           @map("last_run")
+  nextRun      DateTime?           @map("next_run")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
   deliveryLogs DeliveryLog[]
 
   @@map("delivery_configs")
 }
 
 model DeliveryLog {
-  id           String         @id @default(uuid())
-  mirrorId     String         @map("mirror_id")
-  configId     String         @map("config_id")
-  destination  DeliveryDestination
-  status       DeliveryStatus
-  filePath     String?        @map("file_path")
-  size         BigInt?
-  checksum     String?
-  url          String?
-  error        String?
-  metadata     Json?
-  retryCount   Int            @default(0) @map("retry_count")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  mirror       ContentMirror  @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
-  config       DeliveryConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  id          String              @id @default(uuid())
+  mirrorId    String              @map("mirror_id")
+  configId    String              @map("config_id")
+  destination DeliveryDestination
+  status      DeliveryStatus
+  filePath    String?             @map("file_path")
+  size        BigInt?
+  checksum    String?
+  url         String?
+  error       String?
+  metadata    Json?
+  retryCount  Int                 @default(0) @map("retry_count")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  mirror      ContentMirror       @relation(fields: [mirrorId], references: [id], onDelete: Cascade)
+  config      DeliveryConfig      @relation(fields: [configId], references: [id], onDelete: Cascade)
 
   @@index([mirrorId])
   @@index([configId])
@@ -560,22 +619,22 @@ model DeliveryLog {
 }
 
 model CreatorAlgorithmProfile {
-  id                  String   @id @default(uuid())
-  creatorId           String   @unique @map("creator_id")
-  optimalHookTypes    Json     @default("[]") @map("optimal_hook_types")
-  optimalPostTimes    Json     @default("{}") @map("optimal_post_times")
-  optimalDuration     Json     @default("{}") @map("optimal_duration")
-  retentionPattern    Json     @default("{}") @map("retention_pattern")
-  engagementWeights   Json     @default("{}") @map("engagement_weights")
-  viralVelocityThreshold Float   @default(0) @map("viral_velocity_threshold")
-  platformWeights     Json     @default("{}") @map("platform_weights")
-  contentPillars      Json     @default("[]") @map("content_pillars")
-  audienceInsights    Json     @default("{}") @map("audience_insights")
-  lastTrainedAt       DateTime? @map("last_trained_at")
-  trainingDataPoints  Int      @default(0) @map("training_data_points")
-  modelVersion        String   @default("1.0") @map("model_version")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  id                     String    @id @default(uuid())
+  creatorId              String    @unique @map("creator_id")
+  optimalHookTypes       Json      @default("[]") @map("optimal_hook_types")
+  optimalPostTimes       Json      @default("{}") @map("optimal_post_times")
+  optimalDuration        Json      @default("{}") @map("optimal_duration")
+  retentionPattern       Json      @default("{}") @map("retention_pattern")
+  engagementWeights      Json      @default("{}") @map("engagement_weights")
+  viralVelocityThreshold Float     @default(0) @map("viral_velocity_threshold")
+  platformWeights        Json      @default("{}") @map("platform_weights")
+  contentPillars         Json      @default("[]") @map("content_pillars")
+  audienceInsights       Json      @default("{}") @map("audience_insights")
+  lastTrainedAt          DateTime? @map("last_trained_at")
+  trainingDataPoints     Int       @default(0) @map("training_data_points")
+  modelVersion           String    @default("1.0") @map("model_version")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   @@index([creatorId])
   @@map("creator_algorithm_profiles")
@@ -619,14 +678,14 @@ model EngagementVelocity {
 }
 
 model PlatformRankingFactors {
-  id              String   @id @default(uuid())
-  platform        Platform @unique
-  niche           String?
-  factorWeights   Json     @map("factor_weights")
-  sampleSize      Int      @map("sample_size")
-  confidence      Float
-  discoveredAt    DateTime @default(now()) @map("discovered_at")
-  validUntil      DateTime? @map("valid_until")
+  id            String    @id @default(uuid())
+  platform      Platform  @unique
+  niche         String?
+  factorWeights Json      @map("factor_weights")
+  sampleSize    Int       @map("sample_size")
+  confidence    Float
+  discoveredAt  DateTime  @default(now()) @map("discovered_at")
+  validUntil    DateTime? @map("valid_until")
 
   @@index([platform, niche])
   @@map("platform_ranking_factors")
@@ -720,7 +779,9 @@ enum Platform {
 }
 
 enum ABTestStatus {
+  draft
   running
+  paused
   completed
   stopped
 }
@@ -729,6 +790,7 @@ enum TrendSource {
   rss
   reddit
   youtube
+  instagram
   google_trends
   tiktok_creative
 }
