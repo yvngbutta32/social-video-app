@@ -171,6 +171,7 @@ export default function GrowthStudioPage() {
   const [stage, setStage] = useState<StudioStage>('source');
   const [fileName, setFileName] = useState<string | null>(null);
   const [sourceId, setSourceId] = useState<string | null>(null);
+  const [sourceStatus, setSourceStatus] = useState<ApiVideo['status'] | null>(null);
   const [fingerprintReady, setFingerprintReady] = useState(false);
   const [fingerprintSignals, setFingerprintSignals] = useState(sourceSignals);
   const { data: session } = useSession();
@@ -185,6 +186,11 @@ export default function GrowthStudioPage() {
     queryKey: ['studio', 'accounts', accessToken],
     queryFn: () => apiRequest<{ data: ApiSocialAccount[] }>('/accounts?status=active&limit=20', accessToken),
     enabled: Boolean(accessToken),
+  });
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => { const form = new FormData(); form.append('file', file); return apiRequest<{ data: ApiVideo; nextStep: string }>('/videos/upload', accessToken, { method: 'POST', body: form }); },
+    onSuccess: (response) => { setSourceId(response.data.id); setSourceStatus(response.data.status); setFileName(response.data.originalFilename || response.data.title || 'Uploaded source video'); void sourcesQuery.refetch(); toast.success('Source stored privately; processing is now queued'); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not upload this source'),
   });
   const readinessQuery = useQuery({
     queryKey: ['studio', 'readiness', sourceId, accessToken],
@@ -218,6 +224,7 @@ export default function GrowthStudioPage() {
     const firstReadySource = sourcesQuery.data?.data[0];
     if (firstReadySource && !sourceId) {
       setSourceId(firstReadySource.id);
+      setSourceStatus(firstReadySource.status);
       setFileName(firstReadySource.originalFilename || firstReadySource.title || 'Workspace source video');
     }
   }, [sourcesQuery.data, sourceId]);
@@ -226,15 +233,21 @@ export default function GrowthStudioPage() {
     const file = event.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    setSourceId(null);
     setFingerprintReady(false);
     setFingerprintSignals(sourceSignals);
-    toast('Local file selected. Upload integration will create a workspace source before analysis.');
+    if (accessToken) {
+      uploadMutation.mutate(file);
+    } else {
+      setSourceId(null);
+      setSourceStatus(null);
+      toast('Sign in to upload this source into your private workspace.');
+    }
   }
 
   function useExampleSource() {
     setFileName('Founder-notes-source.mp4');
     setSourceId(null);
+    setSourceStatus(null);
     setFingerprintReady(false);
     setFingerprintSignals(sourceSignals);
     toast('Example source loaded for a private workflow preview');
@@ -245,8 +258,8 @@ export default function GrowthStudioPage() {
       toast.error('Add one source video to start the growth loop');
       return;
     }
-    if (!sourceId) {
-      toast.error('Select a ready workspace source to run live analysis. The local file is only a preview until upload is connected.');
+    if (!sourceId || sourceStatus !== 'ready') {
+      toast.error(sourceStatus ? 'This source is still processing. Live analysis will unlock when it is ready.' : 'Select a ready workspace source to run live analysis.');
       return;
     }
     setIsAnalyzing(true);
@@ -292,12 +305,12 @@ export default function GrowthStudioPage() {
         <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(310px,0.5fr)]">
           <section className="min-h-[560px] rounded-2xl border border-white/[0.08] bg-[#111720] p-5 shadow-[0_28px_70px_rgba(0,0,0,0.24)] sm:p-7">
             {stage === 'source' && <div className="flex h-full flex-col"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Start with the original</p><h2 className="mt-2 text-xl font-semibold text-white">Add one source video</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Keep it natural. The system will preserve your point of view while finding the strongest scenes, hooks, and platform treatments to test.</p></div><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-300"><Upload className="h-4 w-4" /></span></div>
-              <div className="mt-7 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-200">Workspace source library</p><p className="mt-1 text-[11px] text-slate-500">Only processed, workspace-owned sources can enter live analysis.</p></div><span className="text-[10px] font-semibold text-cyan-200">{sourcesQuery.isLoading ? 'Loading…' : `${sourcesQuery.data?.data.length ?? 0} ready`}</span></div>{sourcesQuery.data?.data.length ? <select aria-label="Select a ready workspace source" value={sourceId || ''} onChange={(event) => { const selected = sourcesQuery.data?.data.find((source) => source.id === event.target.value); setSourceId(event.target.value); setFileName(selected?.originalFilename || selected?.title || 'Workspace source video'); setFingerprintReady(false); setStage('source'); }} className="mt-3 w-full rounded-lg border border-white/[0.1] bg-[#0b1119] px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-cyan-300/40"><option value="" disabled>Select a ready source video</option>{sourcesQuery.data.data.map((source) => <option key={source.id} value={source.id}>{source.title || source.originalFilename || source.id}</option>)}</select> : <p className="mt-3 text-[11px] leading-5 text-amber-200/80">No ready source is available yet. A local file selection remains a preview until the upload pipeline creates a private workspace source.</p>}</div>
+              <div className="mt-7 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-200">Workspace source library</p><p className="mt-1 text-[11px] text-slate-500">Only processed, workspace-owned sources can enter live analysis.</p></div><span className="text-[10px] font-semibold text-cyan-200">{sourcesQuery.isLoading ? 'Loading…' : `${sourcesQuery.data?.data.length ?? 0} ready`}</span></div>{sourcesQuery.data?.data.length ? <select aria-label="Select a ready workspace source" value={sourceId || ''} onChange={(event) => { const selected = sourcesQuery.data?.data.find((source) => source.id === event.target.value); setSourceId(event.target.value); setSourceStatus(selected?.status || null); setFileName(selected?.originalFilename || selected?.title || 'Workspace source video'); setFingerprintReady(false); setStage('source'); }} className="mt-3 w-full rounded-lg border border-white/[0.1] bg-[#0b1119] px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-cyan-300/40"><option value="" disabled>Select a ready source video</option>{sourcesQuery.data.data.map((source) => <option key={source.id} value={source.id}>{source.title || source.originalFilename || source.id}</option>)}</select> : <p className="mt-3 text-[11px] leading-5 text-amber-200/80">No ready source is available yet. A local file selection remains a preview until the upload pipeline creates a private workspace source.</p>}</div>
               <label className={`mt-8 flex min-h-[250px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center transition ${fileName ? 'border-cyan-300/40 bg-cyan-300/[0.05]' : 'border-white/[0.14] bg-white/[0.02] hover:border-cyan-300/45 hover:bg-cyan-300/[0.04]'}`}><input type="file" accept="video/*" className="sr-only" onChange={handleFileChange} /><span className={`flex h-14 w-14 items-center justify-center rounded-2xl ${fileName ? 'bg-cyan-300 text-slate-950' : 'bg-white/[0.07] text-cyan-300'}`}>{fileName ? <Check className="h-6 w-6" /> : <FileVideo className="h-6 w-6" />}</span>{fileName ? <><p className="mt-4 text-sm font-semibold text-cyan-100">{fileName}</p><p className="mt-1.5 text-xs text-slate-500">Added to your private source library · Click to replace</p></> : <><p className="mt-4 text-sm font-semibold text-slate-200">Drop a video here, or choose a file</p><p className="mt-1.5 text-xs text-slate-500">MP4, MOV, or WebM · Original footage stays in your workspace</p></>}<span className="mt-5 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-300">Choose source video</span></label>
               {!fileName && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3"><p className="text-xs text-slate-500">Want to see the workflow first?</p><button type="button" onClick={useExampleSource} className="text-xs font-bold text-cyan-300 transition hover:text-cyan-200">Explore with an example source <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></button></div>}
               <div className="mt-5 flex items-center justify-between rounded-xl border border-cyan-300/10 bg-cyan-300/[0.04] px-4 py-3"><p className="text-xs text-slate-400">Live API session</p><span className={`text-[10px] font-bold uppercase tracking-[0.12em] ${accessToken ? 'text-emerald-300' : 'text-amber-200'}`}>{accessToken ? 'Authenticated' : 'Preview mode'}</span></div>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">{[{ icon: LockKeyhole, title: 'Private by default', copy: 'Only your workspace and system jobs can access source files.' }, { icon: ScanSearch, title: 'Traceable outputs', copy: 'Every adaptation retains a link back to your original.' }, { icon: ShieldCheck, title: 'Creator controlled', copy: 'Nothing publishes until you review the plan.' }].map((item) => <div key={item.title} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5"><item.icon className="h-4 w-4 text-cyan-300" /><p className="mt-3 text-xs font-semibold text-slate-200">{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{item.copy}</p></div>)}</div>
-              <div className="mt-auto flex justify-end border-t border-white/[0.07] pt-6"><Button onClick={analyzeSource} disabled={!fileName || isAnalyzing} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">{isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}{isAnalyzing ? 'Understanding source…' : 'Understand this source'}<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
+              <div className="mt-auto flex justify-end border-t border-white/[0.07] pt-6"><Button onClick={analyzeSource} disabled={!fileName || isAnalyzing || uploadMutation.isPending} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">{isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}{uploadMutation.isPending ? 'Storing source…' : isAnalyzing ? 'Understanding source…' : 'Understand this source'}<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
             </div>}
 
             {stage === 'analysis' && <div className="flex h-full flex-col"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Creative fingerprint</p><h2 className="mt-2 text-xl font-semibold text-white">What this source can carry</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">The system found a clear point of view and several elements worth retaining across adaptations. These are guidance signals, not a promise of performance.</p></div><div className="flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs font-semibold text-emerald-200"><BadgeCheck className="h-4 w-4" />Analysis complete</div></div>

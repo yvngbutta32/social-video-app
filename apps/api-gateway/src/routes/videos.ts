@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
 import { assertPublishingAllowed } from '../lib/pilot-access.js';
+import { uploadSource } from '../lib/source-storage.js';
 
 const videoSchema = z.object({
   title: z.string().min(1).max(200),
@@ -99,6 +100,65 @@ export function createVideoRoutes() {
       data: videos,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
+  });
+
+  app.post('/upload', async (c: any) => {
+    const user = c.get('user');
+    const body = await c.req.parseBody();
+    const candidate = body.file as { name?: string; type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | undefined;
+    const workspaceMember = await prisma.workspaceMember.findFirst({
+      where: { userId: user.id },
+      select: { workspaceId: true },
+    });
+
+    if (!workspaceMember) {
+      throw new HTTPException(403, { message: 'No creator workspace access' });
+    }
+    if (!candidate || typeof candidate.arrayBuffer !== 'function') {
+      throw new HTTPException(400, { message: 'A video file is required.' });
+    }
+
+    const name = candidate.name || 'source.mp4';
+    const contentType = candidate.type || 'application/octet-stream';
+    const extensionAllowed = /\.(mp4|mov|webm|m4v)$/i.test(name);
+    const mimeAllowed = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'].includes(contentType);
+    if (!extensionAllowed || (contentType !== 'application/octet-stream' && !mimeAllowed)) {
+      throw new HTTPException(415, { message: 'Only MP4, MOV, WebM, and M4V creator source videos are accepted.' });
+    }
+
+    const maxBytes = Number(process.env.MAX_SOURCE_UPLOAD_BYTES || 524_288_000);
+    if (typeof candidate.size === 'number' && candidate.size > maxBytes) {
+      throw new HTTPException(413, { message: `Source video exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB upload limit.` });
+    }
+
+    const buffer = Buffer.from(await candidate.arrayBuffer());
+    if (buffer.byteLength === 0 || buffer.byteLength > maxBytes) {
+      throw new HTTPException(413, { message: `Source video exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB upload limit or is empty.` });
+    }
+
+    const stored = await uploadSource({ workspaceId: workspaceMember.workspaceId, originalFilename: name, contentType, body: buffer });
+    const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim().slice(0, 200) : name.replace(/\.[^.]+$/, '');
+    const video = await prisma.video.create({
+      data: {
+        workspaceId: workspaceMember.workspaceId,
+        uploadedBy: user.id,
+        title,
+        originalFilename: name,
+        minioObjectKey: stored.key,
+        minioBucket: stored.bucket,
+        fileSizeBytes: BigInt(stored.sizeBytes),
+        mimeType: contentType,
+        status: 'uploading',
+        metadata: { sourceType: 'creator-upload', processingState: 'queued', processingRequired: true },
+      },
+      select: { id: true, title: true, originalFilename: true, status: true, fileSizeBytes: true, createdAt: true },
+    });
+
+    return c.json({
+      data: { ...video, fileSizeBytes: video.fileSizeBytes?.toString() ?? null },
+      nextStep: 'processing_required',
+      message: 'Source stored privately in the creator workspace. Video processing must complete before live fingerprinting or experiment planning.',
+    }, 201);
   });
 
   app.get('/:id', async (c: any) => {

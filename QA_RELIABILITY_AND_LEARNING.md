@@ -43,3 +43,11 @@ Growth Studio now uses the existing authenticated session bearer token through a
 The local file chooser and example source remain explicitly preview-only because the current video API accepts a source URL and the production upload-to-private-storage pipeline is not yet complete. A selected local file cannot be mistaken for a live source: the interface tells the creator that a workspace source must exist before live analysis or planning can run.
 
 The web type-check and production build passed after the integration. The complete API pilot/platform/Growth Studio contract suite, API type-check/build, and self-hosted intelligence regression checks also passed.
+
+## Private creator source intake checkpoint
+
+Growth Studio’s file chooser now uploads authenticated creator files to `POST /api/v1/videos/upload`. The API validates the creator workspace, restricts accepted media types to MP4/MOV/WebM/M4V, enforces a configurable 500 MB default limit, stores bytes under a workspace-scoped MinIO object key, and creates a private video record with processing-pending state. The browser then keeps the source locked from live fingerprinting until the API reports `ready`.
+
+Storage credentials are read from deployment environment variables or Docker secret files and are never returned to the browser. The source key includes the workspace boundary and a generated identifier rather than a user-controlled path. The API and web type-checks, source-intake contract assertions, and production builds passed.
+
+The source-processing worker still needs to be connected to the queued record on a Docker-capable persistent deployment target. Until that worker is deployed and tested, a newly uploaded source correctly remains processing-pending rather than being falsely presented as analysis-ready.

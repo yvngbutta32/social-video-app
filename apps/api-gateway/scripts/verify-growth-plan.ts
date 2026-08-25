@@ -128,6 +128,19 @@ async function main() {
   assert.match(publishingRoute, /publishingAttempt\.create/);
   assert.match(publishingRoute, /official_creator_authorized_connection_required/);
 
+  const videoRoute = await readFile(new URL('../src/routes/videos.ts', import.meta.url), 'utf8');
+  assert.match(videoRoute, /app\.post\('\/upload'/);
+  assert.match(videoRoute, /No creator workspace access/);
+  assert.match(videoRoute, /Only MP4, MOV, WebM, and M4V/);
+  assert.match(videoRoute, /processing_required/);
+  assert.match(videoRoute, /uploadSource/);
+
+  const storageAdapter = await readFile(new URL('../src/lib/source-storage.ts', import.meta.url), 'utf8');
+  assert.match(storageAdapter, /workspaces\/\$\{workspaceId\}\/sources/);
+  assert.match(storageAdapter, /Metadata: \{ workspaceId/);
+  assert.match(storageAdapter, /MINIO_ACCESS_KEY_FILE/);
+  assert.match(storageAdapter, /forcePathStyle: true/);
+
   const lifecycleMigration = await readFile(new URL('../../web/prisma/migrations/4_creator_publish_lifecycle/migration.sql', import.meta.url), 'utf8');
   assert.match(lifecycleMigration, /publishing_attempts/);
   assert.match(lifecycleMigration, /idempotency_key/);
