@@ -39,12 +39,26 @@ export type ApiVideo = {
   variants?: Array<{ id: string; platform: string; status: string; scheduledPosts?: Array<{ status: string }> }>;
 };
 
+export type ApiPlatformCapability = {
+  platform: string;
+  label: string;
+  officialPublishing: 'direct_post' | 'media_publish' | 'video_insert' | 'not_configured';
+  creatorAccountRequirement: string;
+  supportsDrafts: boolean;
+  supportsScheduling: boolean;
+  metricsStatus: 'planned' | 'available_after_connection';
+  readiness: 'official_connector_ready' | 'connector_required';
+  safeguards: string[];
+};
+
 export type ApiSocialAccount = {
   id: string;
   platform: string;
   username: string | null;
   displayName: string | null;
   isActive: boolean;
+  connectionState?: 'connected' | 'token_expired' | 'revoked';
+  capability?: ApiPlatformCapability | null;
 };
 
 export type GrowthPlan = {

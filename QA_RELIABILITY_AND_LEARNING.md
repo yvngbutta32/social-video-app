@@ -87,3 +87,9 @@ The platform foundation also includes an explicit capability registry, AES-256-G
 The experiment scorecard now distinguishes directional-only evidence from decision-ready-for-review evidence. It requires at least three observations per variant and five baseline observations before a variant can be marked eligible for winner review. Growth Studio suppresses percentage-lift claims for smaller samples and labels them as directional, while continuing to surface the creator’s own baseline and collection state.
 
 The scorecard contract, API type-check/build, and web type-check/build passed. This safeguard is designed to protect creator trust and investor-grade measurement quality: a small sample can inform the next test, but it cannot be presented as a reliable causal result or future-performance guarantee.
+
+## Premium delivery-readiness UX checkpoint
+
+Growth Studio now distinguishes an active creator-connected destination from an official connector that is actually ready for production delivery. A connected account whose platform connector remains unconfigured is labeled `Connected · official connector required` rather than presented as publish-ready. The creator-facing scorecard continues to suppress winner-style percentage claims until minimum evidence thresholds are met.
+
+Web type-check/build and API Growth Studio type-check/build plus contract validation passed. This keeps the premium workflow truthful while official OAuth, publishing, and metrics connectors remain deployment-gated.
