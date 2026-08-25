@@ -7,6 +7,7 @@ import { createAttemptIdempotencyKey, resolvePublishAttemptOutcome, validateCrea
 import { buildReachPlan } from '../src/lib/reach-plan.js';
 import { decryptToken, encryptToken } from '../src/lib/token-crypto.js';
 import { getPlatformCapability } from '../src/lib/platform-capabilities.js';
+import { buildExperimentScorecard } from '../src/lib/experiment-scorecard.js';
 
 async function main() {
   const plan = buildGrowthExperimentPlan({
@@ -30,6 +31,14 @@ async function main() {
   assert.equal(decryptToken(encryptedToken, 'test-encryption-key'), 'creator-access-token');
   assert.equal(getPlatformCapability('tiktok')?.officialPublishing, 'direct_post');
   assert.equal(getPlatformCapability('facebook')?.readiness, 'connector_required');
+  const scorecard = buildExperimentScorecard({
+    objective: 'retention',
+    variants: [{ id: 'variant-1', platform: 'tiktok', metrics: [{ scheduledPostId: 'post-1', completionRate: 0.55, recordedAt: '2026-08-25T10:00:00Z' }, { scheduledPostId: 'post-1', completionRate: 0.65, recordedAt: '2026-08-25T11:00:00Z' }] }],
+    baseline: [{ scheduledPostId: 'baseline-1', completionRate: 0.5, recordedAt: '2026-08-25T09:00:00Z' }],
+  });
+  assert.equal(scorecard.variants[0].sampleSize, 1);
+  assert(Math.abs((scorecard.variants[0].relativeLift ?? 0) - 0.3) < 1e-9);
+  assert.equal(scorecard.decisionState, 'measuring');
   assert(plan.every((experiment) => experiment.hook.length > 0));
   assert(plan.every((experiment) => experiment.changes.length >= 3));
   assert(plan.every((experiment) => experiment.safeguards.some((guardrail) => /not a guarantee/i.test(guardrail))));
@@ -137,6 +146,8 @@ async function main() {
   assert.match(growthRoute, /assessCreatorWorkflowReadiness/);
   assert.match(growthRoute, /reach-plan/);
   assert.match(growthRoute, /buildReachPlan/);
+  assert.match(growthRoute, /scorecard/);
+  assert.match(growthRoute, /buildExperimentScorecard/);
   const accountRoute = await readFile(new URL('../src/routes/accounts.ts', import.meta.url), 'utf8');
   assert.match(accountRoute, /encryptToken\(body\.accessToken\)/);
   assert.match(accountRoute, /accessTokenEncrypted: _accessToken/);

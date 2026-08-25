@@ -14,6 +14,7 @@ import {
 import { requireWorkspaceAccess } from '../lib/pilot-access.js';
 import { evaluateLearningSignal } from '../lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
+import { buildExperimentScorecard } from '../lib/experiment-scorecard.js';
 import { buildReachPlan } from '../lib/reach-plan.js';
 
 const sourceSchema = z.object({
@@ -296,6 +297,32 @@ export function createGrowthRoutes() {
         ...learning,
       },
     });
+  });
+
+  app.get('/scorecard/:videoId', zValidator('query', learningQuerySchema), async (c: any) => {
+    const actor = c.get('user');
+    const videoId = c.req.param('videoId');
+    const query = c.req.valid('query');
+    const video = await prisma.video.findUnique({ where: { id: videoId }, select: { id: true, workspaceId: true } });
+    if (!video) throw new HTTPException(404, { message: 'Source video not found' });
+    await requireWorkspaceAccess(actor, video.workspaceId);
+
+    const variants = await prisma.videoVariant.findMany({
+      where: { videoId: video.id },
+      select: {
+        id: true,
+        platform: true,
+        metrics: { select: { scheduledPostId: true, variantId: true, platform: true, recordedAt: true, views: true, likes: true, comments: true, shares: true, saves: true, followerGain: true, completionRate: true } },
+      },
+    });
+    const variantIds = variants.map((variant) => variant.id);
+    const baseline = await prisma.postMetric.findMany({
+      where: { workspaceId: video.workspaceId, ...(variantIds.length ? { variantId: { notIn: variantIds } } : {}) },
+      select: { scheduledPostId: true, variantId: true, platform: true, recordedAt: true, views: true, likes: true, comments: true, shares: true, saves: true, followerGain: true, completionRate: true },
+      orderBy: { recordedAt: 'desc' },
+      take: 100,
+    });
+    return c.json({ data: { sourceVideoId: video.id, ...buildExperimentScorecard({ objective: query.objective as 'views' | 'engagement' | 'followers' | 'retention', variants, baseline }) } });
   });
 
   return app;

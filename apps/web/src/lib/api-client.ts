@@ -72,6 +72,15 @@ export type Readiness = {
   safeguards: string[];
 };
 
+export type ExperimentScorecard = {
+  objective: string;
+  baseline: number | null;
+  baselineSampleSize: number;
+  decisionState: 'awaiting_metrics' | 'needs_baseline' | 'measuring';
+  variants: Array<{ variantId: string; platform: string; sampleSize: number; observed: number | null; relativeLift: number | null; state: string }>;
+  safeguards: string[];
+};
+
 export type ReachPlan = {
   sourceTitle: string;
   objective: string;

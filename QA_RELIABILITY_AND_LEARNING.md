@@ -75,3 +75,9 @@ The platform foundation now exposes an explicit capability registry for TikTok, 
 Social-account access and refresh tokens are encrypted with AES-256-GCM using the deployment `ENCRYPTION_KEY`; API responses redact encrypted credential fields. The previous refresh-token and metrics-sync success stubs now return an honest not-configured response rather than recording synthetic state. The legacy browser-based publisher is blocked by default and requires an explicit development-only opt-in, keeping production delivery behind official creator-authorized connectors.
 
 Platform capability, token round-trip, credential-redaction, creator-autonomy, and API build checks passed. Actual OAuth, token refresh, official publishing, and platform metrics ingestion remain deployment-gated until platform app credentials and approved permissions are configured.
+
+## Outcome scorecard and platform trust checkpoint
+
+Growth Studio now has a baseline-relative experiment scorecard endpoint and creator-facing panel. It deduplicates metric snapshots by scheduled post, reports sample size, observed objective value, relative lift, and cautious states such as `awaiting_metrics`, `needs_baseline`, and `measuring`. This makes product value legible through creator outcomes rather than unsupported reach promises.
+
+The platform foundation also includes an explicit capability registry, AES-256-GCM credential encryption, redaction of encrypted tokens from API responses, honest not-configured responses for unsupported refresh and metric-sync connectors, and a production block on legacy browser automation. Full API and web validation passed for this checkpoint.
