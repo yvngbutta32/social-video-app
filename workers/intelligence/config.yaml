@@ -7,25 +7,26 @@ database:
   port: 5432
   name: social_video
   user: social_video
-  password: UMTaRcFvsVRFfnRGQxxDSfCmDKIjS2B2
+  password: null # Supply through DB_PASSWORD or deployment secrets.
   ssl: false
   poolSize: 10
 
 redis:
   host: localhost
   port: 6379
-  password: EPRhByzlSYjxuGUWDa7B8DzZhWzTzq
+  password: null # Supply through REDIS_PASSWORD or deployment secrets.
   db: 0
 
 rabbitmq:
-  url: amqp://guest:0ilcL99gnWK8WxQaqi8Zq9fv3MR2mJl@localhost:5672
+  url: null # Supply through RABBITMQ_URL or deployment secrets.
 
-openai:
-  apiKey: sk-REPLACE_WITH_REAL_OPENAI_KEY
-  model: gpt-4-turbo-preview
-  embeddingModel: text-embedding-3-large
+llm:
+  # Self-hosted Ollama OpenAI-compatible endpoint. No external model provider is required.
+  baseUrl: http://ollama:11434/v1
+  model: llama3.2:3b
   maxTokens: 4096
   temperature: 0.7
+  timeoutMs: 120000
 
 tensorflow:
   modelPath: ./models/viral-predictor

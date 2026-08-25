@@ -1,13 +1,13 @@
 const config = require('../config');
 const logger = require('../logger');
 const db = require('../db');
-const { OpenAI } = require('openai');
+const { LocalChatClient } = require('../lib/local-llm');
 const natural = require('natural');
 const compromise = require('compromise');
 
 class HookGenerator {
   constructor() {
-    this.openai = new OpenAI({ apiKey: config.openai.apiKey });
+    this.openai = new LocalChatClient(config.llm);
     this.tokenizer = new natural.WordTokenizer();
     this.hookTypes = config.hooks.hookTypes;
     this.platforms = config.hooks.platforms;
@@ -129,7 +129,7 @@ class HookGenerator {
         metadata: {
           strategy: strategy.style,
           contentAnalysis,
-          generationModel: config.openai.model,
+          generationModel: config.llm.model,
         },
       });
       savedHooks.push(saved);
@@ -143,7 +143,7 @@ class HookGenerator {
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: config.openai.model,
+        model: config.llm.model,
         messages: [
           {
             role: 'system',
@@ -151,7 +151,7 @@ class HookGenerator {
           },
           { role: 'user', content: prompt }
         ],
-        temperature: config.openai.temperature,
+        temperature: config.llm.temperature,
         maxTokens: 300,
       });
 
@@ -223,7 +223,7 @@ Return JSON with:
 - desires: [array of outcomes viewer wants]`;
 
       const completion = await this.openai.chat.completions.create({
-        model: config.openai.model,
+        model: config.llm.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3,
         maxTokens: 400,
@@ -316,7 +316,7 @@ Return as JSON array of strings only.`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: config.openai.model,
+        model: config.llm.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.8,
         maxTokens: 500,

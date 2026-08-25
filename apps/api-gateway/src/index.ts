@@ -17,6 +17,7 @@ import { createAuthRoutes } from './routes/auth.js';
 import { createWebhookRoutes } from './routes/webhooks.js';
 import { createIntelligenceRoutes } from './routes/intelligence.js';
 import { createOwnerRoutes } from './routes/owner.js';
+import { createGrowthRoutes } from './routes/growth.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
 
@@ -81,6 +82,7 @@ app.route('/api/v1/accounts', createAccountRoutes());
 app.route('/api/v1/analytics', createAnalyticsRoutes());
 app.route('/api/v1/webhooks', createWebhookRoutes());
 app.route('/api/v1/intelligence', createIntelligenceRoutes());
+app.route('/api/v1/growth', createGrowthRoutes());
 app.route('/api/v1/owner', createOwnerRoutes());
 
 app.onError((err, c) => {

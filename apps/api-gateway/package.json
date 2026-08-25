@@ -9,7 +9,8 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test:pilot": "tsx scripts/verify-pilot-foundation.ts",
-    "test:platform": "tsx scripts/verify-platform-contract.ts"
+    "test:platform": "tsx scripts/verify-platform-contract.ts",
+    "test:growth": "tsx scripts/verify-growth-plan.ts"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.2.0",

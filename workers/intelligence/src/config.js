@@ -49,13 +49,13 @@ module.exports = {
     },
   },
 
-  // OpenAI
-  openai: {
-    apiKey: config.openai?.apiKey || process.env.OPENAI_API_KEY,
-    model: config.openai?.model || process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
-    embeddingModel: config.openai?.embeddingModel || process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-large',
-    maxTokens: config.openai?.maxTokens || parseInt(process.env.OPENAI_MAX_TOKENS) || 4096,
-    temperature: config.openai?.temperature || parseFloat(process.env.OPENAI_TEMPERATURE) || 0.7,
+  // Self-hosted local model endpoint (Ollama OpenAI-compatible API)
+  llm: {
+    baseUrl: config.llm?.baseUrl || process.env.OLLAMA_OPENAI_COMPATIBLE_URL || 'http://ollama:11434/v1',
+    model: config.llm?.model || process.env.OLLAMA_MODEL || 'llama3.2:3b',
+    maxTokens: config.llm?.maxTokens || parseInt(process.env.OLLAMA_MAX_TOKENS) || 4096,
+    temperature: config.llm?.temperature || parseFloat(process.env.OLLAMA_TEMPERATURE) || 0.7,
+    timeoutMs: config.llm?.timeoutMs || parseInt(process.env.OLLAMA_TIMEOUT_MS) || 120000,
   },
 
   // TensorFlow

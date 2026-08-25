@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest --coverage",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test:local-model": "node scripts/verify-local-llm.js",
+    "test:standalone": "node scripts/verify-standalone.js"
   },
   "dependencies": {
     "@prisma/client": "^7.9.1",
@@ -24,7 +26,6 @@
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.3",
     "natural": "^6.10.4",
-    "openai": "^4.28.0",
     "pg": "^8.11.3",
     "pgvector": "^0.1.7",
     "uuid": "^9.0.1",

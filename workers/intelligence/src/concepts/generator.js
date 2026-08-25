@@ -1,12 +1,12 @@
 const config = require('../config');
 const logger = require('../logger');
 const db = require('../db');
-const { OpenAI } = require('openai');
+const { LocalChatClient } = require('../lib/local-llm');
 const axios = require('axios');
 
 class ConceptGenerator {
   constructor() {
-    this.openai = new OpenAI({ apiKey: config.openai.apiKey });
+    this.openai = new LocalChatClient(config.llm);
     this.platforms = config.concepts.platforms;
     this.trendsWorkerUrl = config.trendsWorker.url;
   }
@@ -130,7 +130,7 @@ class ConceptGenerator {
           angle: concept.angle,
           templateUsed: concept.templateUsed,
           strategy: strategy.format,
-          generationModel: config.openai.model,
+          generationModel: config.llm.model,
         },
       });
       savedConcepts.push(saved);
@@ -172,7 +172,7 @@ class ConceptGenerator {
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: config.openai.model,
+        model: config.llm.model,
         messages: [
           {
             role: 'system',
@@ -390,7 +390,7 @@ Return improved concept as JSON with same structure.
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: config.openai.model,
+        model: config.llm.model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.6,
         maxTokens: 2000,
