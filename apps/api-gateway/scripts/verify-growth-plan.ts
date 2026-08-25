@@ -5,6 +5,8 @@ import { evaluateLearningSignal } from '../src/lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness, decideRetry } from '../src/lib/reliability.js';
 import { createAttemptIdempotencyKey, resolvePublishAttemptOutcome, validateCreatorApproval } from '../src/lib/publishing-lifecycle.js';
 import { buildReachPlan } from '../src/lib/reach-plan.js';
+import { decryptToken, encryptToken } from '../src/lib/token-crypto.js';
+import { getPlatformCapability } from '../src/lib/platform-capabilities.js';
 
 async function main() {
   const plan = buildGrowthExperimentPlan({
@@ -22,6 +24,12 @@ async function main() {
   assert.deepEqual(reachPlan.steps.map((step) => step.type), ['creator_authorized_publish', 'authorized_cross_platform', 'creator_owned_share_loop', 'creator_approved_collaboration', 'evidence_checkpoint']);
   assert(reachPlan.safeguards.some((guardrail) => /fake engagement/i.test(guardrail)));
   assert(reachPlan.safeguards.some((guardrail) => /not guaranteed reach/i.test(guardrail)));
+
+  const encryptedToken = encryptToken('creator-access-token', 'test-encryption-key');
+  assert.notEqual(encryptedToken, 'creator-access-token');
+  assert.equal(decryptToken(encryptedToken, 'test-encryption-key'), 'creator-access-token');
+  assert.equal(getPlatformCapability('tiktok')?.officialPublishing, 'direct_post');
+  assert.equal(getPlatformCapability('facebook')?.readiness, 'connector_required');
   assert(plan.every((experiment) => experiment.hook.length > 0));
   assert(plan.every((experiment) => experiment.changes.length >= 3));
   assert(plan.every((experiment) => experiment.safeguards.some((guardrail) => /not a guarantee/i.test(guardrail))));
@@ -129,6 +137,17 @@ async function main() {
   assert.match(growthRoute, /assessCreatorWorkflowReadiness/);
   assert.match(growthRoute, /reach-plan/);
   assert.match(growthRoute, /buildReachPlan/);
+  const accountRoute = await readFile(new URL('../src/routes/accounts.ts', import.meta.url), 'utf8');
+  assert.match(accountRoute, /encryptToken\(body\.accessToken\)/);
+  assert.match(accountRoute, /accessTokenEncrypted: _accessToken/);
+  assert.match(accountRoute, /refreshTokenEncrypted: _refreshToken/);
+  assert.match(accountRoute, /app\.get\('\/capabilities'/);
+  assert.match(accountRoute, /Official .* connector is not configured yet/);
+  assert.doesNotMatch(accountRoute, /return c\.json\(\{ success: true, message: 'Token refreshed'/);
+
+  const publisherWorker = await readFile(new URL('../../../workers/processor/src/publisher.js', import.meta.url), 'utf8');
+  assert.match(publisherWorker, /official_connector_required/);
+  assert.match(publisherWorker, /ALLOW_LEGACY_BROWSER_AUTOMATION/);
 
   const publishingRoute = await readFile(new URL('../src/routes/publishing.ts', import.meta.url), 'utf8');
   assert.match(publishingRoute, /Platform oversight is read-only/);

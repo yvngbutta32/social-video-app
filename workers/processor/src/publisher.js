@@ -1,12 +1,12 @@
 /**
- * Social Media Publisher - Playwright-based Automation
+ * Legacy browser publisher retained only for development fallback. Production delivery
+ * must use an official creator-authorized platform connector.
  * 
  * Handles posting to multiple platforms using browser automation
  * Supports: TikTok, Instagram Reels, YouTube Shorts, Facebook Reels, X (Twitter), LinkedIn
  * 
  * Features:
  * - Session persistence with cookies
- * - Anti-detection measures
  * - Retry logic with exponential backoff
  * - Caption/hashtag injection
  * - Thumbnail selection
@@ -871,6 +871,9 @@ export const publisher = new SocialPublisher();
  * High-level publish function for scheduled posts
  */
 export async function publishScheduledPost(scheduledPost, account, videoPath, thumbnailPath = null) {
+  if (process.env.ALLOW_LEGACY_BROWSER_AUTOMATION !== 'true') {
+    throw new Error(`official_connector_required:${account.platform}`);
+  }
   const metadata = {
     caption: scheduledPost.metadata?.caption || '',
     hashtags: scheduledPost.metadata?.hashtags || [],

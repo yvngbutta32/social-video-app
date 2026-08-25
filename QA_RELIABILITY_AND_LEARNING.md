@@ -67,3 +67,11 @@ Growth Studio now exposes a server-generated reach architecture for ready creato
 The plan explicitly separates planned distribution, confirmed delivery, and observed performance. It does not purchase reach, create fake engagement, use unauthorized access, spam communities, or claim control over recommendation ranking. Official platform capabilities remain a creator-authorized execution boundary; current research is recorded in `PLATFORM_AMPLIFICATION_RESEARCH.md`.
 
 The reach-plan contract, API type-check/build, and web type-check/build passed.
+
+## Platform foundation checkpoint
+
+The platform foundation now exposes an explicit capability registry for TikTok, Instagram, YouTube, Facebook, X, and LinkedIn. Each platform declares its official publishing mode, creator-account requirement, draft/scheduling support, metrics state, and safeguards. Capabilities marked `connector_required` are not presented as production-ready.
+
+Social-account access and refresh tokens are encrypted with AES-256-GCM using the deployment `ENCRYPTION_KEY`; API responses redact encrypted credential fields. The previous refresh-token and metrics-sync success stubs now return an honest not-configured response rather than recording synthetic state. The legacy browser-based publisher is blocked by default and requires an explicit development-only opt-in, keeping production delivery behind official creator-authorized connectors.
+
+Platform capability, token round-trip, credential-redaction, creator-autonomy, and API build checks passed. Actual OAuth, token refresh, official publishing, and platform metrics ingestion remain deployment-gated until platform app credentials and approved permissions are configured.

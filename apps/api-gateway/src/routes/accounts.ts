@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
+import { encryptToken } from '../lib/token-crypto.js';
+import { getPlatformCapability, listPlatformCapabilities } from '../lib/platform-capabilities.js';
 
 const accountSchema = z.object({
   platform: z.enum(['tiktok', 'instagram', 'youtube', 'facebook', 'x', 'linkedin']),
@@ -72,16 +74,23 @@ export function createAccountRoutes() {
     ]);
     
     // Don't return encrypted tokens
-    const safeAccounts = accounts.map((acc: any) => ({
-      ...acc,
-      accessTokenEncrypted: undefined,
-      refreshTokenEncrypted: undefined,
-    }));
+    const safeAccounts = accounts.map((acc: any) => {
+      const { accessTokenEncrypted: _accessToken, refreshTokenEncrypted: _refreshToken, ...safe } = acc;
+      return {
+        ...safe,
+        capability: getPlatformCapability(acc.platform),
+        connectionState: !acc.isActive ? 'revoked' : acc.tokenExpiresAt && new Date(acc.tokenExpiresAt) <= new Date() ? 'token_expired' : 'connected',
+      };
+    });
     
     return c.json({
       data: safeAccounts,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
+  });
+
+  app.get('/capabilities', async (c: any) => {
+    return c.json({ data: listPlatformCapabilities(), safeguards: ['Only creator-authorized official integrations may publish or collect platform data.', 'A capability marked connector_required is not presented as production-ready.'] });
   });
 
   app.get('/:id', async (c: any) => {
@@ -106,9 +115,8 @@ export function createAccountRoutes() {
     }
     
     // Don't return encrypted tokens
-    const { accessTokenEncrypted, refreshTokenEncrypted, ...safeAccount } = account;
-    
-    return c.json({ data: safeAccount });
+    const { accessTokenEncrypted: _accessToken, refreshTokenEncrypted: _refreshToken, ...safeAccount } = account;
+    return c.json({ data: { ...safeAccount, capability: getPlatformCapability(account.platform), connectionState: !account.isActive ? 'revoked' : account.tokenExpiresAt && account.tokenExpiresAt <= new Date() ? 'token_expired' : 'connected' } });
   });
 
   app.post('/', zValidator('json', accountSchema), async (c: any) => {
@@ -124,7 +132,6 @@ export function createAccountRoutes() {
       throw new HTTPException(403, { message: 'No workspace access' });
     }
     
-    // In real app, encrypt tokens before storing
     const account = await prisma.socialAccount.create({
       data: {
         workspaceId: workspaceMember.workspaceId,
@@ -133,8 +140,8 @@ export function createAccountRoutes() {
         username: body.username,
         displayName: body.displayName,
         avatarUrl: body.avatarUrl,
-        accessTokenEncrypted: body.accessToken, // TODO: encrypt
-        refreshTokenEncrypted: body.refreshToken, // TODO: encrypt
+        accessTokenEncrypted: encryptToken(body.accessToken),
+        refreshTokenEncrypted: body.refreshToken ? encryptToken(body.refreshToken) : null,
         tokenExpiresAt: body.tokenExpiresAt ? new Date(body.tokenExpiresAt) : null,
         scopes: body.scopes || [],
         isActive: true,
@@ -181,6 +188,8 @@ export function createAccountRoutes() {
     const updated = await prisma.socialAccount.update({
       where: { id },
       data: {
+        accessTokenEncrypted: body.accessToken ? encryptToken(body.accessToken) : undefined,
+        refreshTokenEncrypted: body.refreshToken ? encryptToken(body.refreshToken) : undefined,
         username: body.username,
         displayName: body.displayName,
         avatarUrl: body.avatarUrl,
@@ -244,17 +253,7 @@ export function createAccountRoutes() {
       throw new HTTPException(404, { message: 'Account not found' });
     }
     
-    // TODO: Implement actual token refresh logic per platform
-    // For now, just update the timestamp
-    await prisma.socialAccount.update({
-      where: { id },
-      data: { 
-        tokenExpiresAt: new Date(Date.now() + 3600000), // 1 hour from now
-        updatedAt: new Date(),
-      },
-    });
-    
-    return c.json({ success: true, message: 'Token refreshed' });
+    throw new HTTPException(501, { message: `Official ${account.platform} token refresh connector is not configured yet. Reconnect this creator-authorized account through the official OAuth flow.` });
   });
 
   app.post('/:id/sync-metrics', async (c: any) => {
@@ -278,15 +277,7 @@ export function createAccountRoutes() {
       throw new HTTPException(404, { message: 'Account not found' });
     }
     
-    // TODO: Queue sync job via BullMQ
-    // await syncQueue.add('sync', { accountId: account.id });
-    
-    await prisma.socialAccount.update({
-      where: { id },
-      data: { lastSyncAt: new Date() },
-    });
-    
-    return c.json({ success: true, message: 'Metrics sync queued' });
+    throw new HTTPException(501, { message: `Official ${account.platform} metrics connector is not configured yet. No synthetic sync timestamp was recorded.` });
   });
 
   app.get('/:id/analytics', async (c: any) => {
