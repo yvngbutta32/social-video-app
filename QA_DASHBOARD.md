@@ -17,7 +17,7 @@ The dashboard preview at `/dashboard` loads with the expected desktop layout:
 
 ## Interaction observation
 
-Two automated click attempts on the primary **New campaign** button did not visibly open its dialog in the remote browser session, despite a clean client console. This may be a browser-automation interaction limitation or a hydration/event issue that requires a later manual user check. The static route rendered correctly, and the production build/type-check passed.
+Two automated click attempts and one programmatic invocation of the primary **New campaign** button did not visibly open its dialog in the remote browser session, despite a clean client console. This may be a browser-automation interaction limitation or a hydration/event issue that requires a later manual user check. The static route rendered correctly, and the production build/type-check passed.
 
 ## Build-related fixes made
 
