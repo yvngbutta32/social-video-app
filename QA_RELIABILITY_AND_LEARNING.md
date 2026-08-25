@@ -81,3 +81,9 @@ Platform capability, token round-trip, credential-redaction, creator-autonomy, a
 Growth Studio now has a baseline-relative experiment scorecard endpoint and creator-facing panel. It deduplicates metric snapshots by scheduled post, reports sample size, observed objective value, relative lift, and cautious states such as `awaiting_metrics`, `needs_baseline`, and `measuring`. This makes product value legible through creator outcomes rather than unsupported reach promises.
 
 The platform foundation also includes an explicit capability registry, AES-256-GCM credential encryption, redaction of encrypted tokens from API responses, honest not-configured responses for unsupported refresh and metric-sync connectors, and a production block on legacy browser automation. Full API and web validation passed for this checkpoint.
+
+## Decision-quality checkpoint
+
+The experiment scorecard now distinguishes directional-only evidence from decision-ready-for-review evidence. It requires at least three observations per variant and five baseline observations before a variant can be marked eligible for winner review. Growth Studio suppresses percentage-lift claims for smaller samples and labels them as directional, while continuing to surface the creator’s own baseline and collection state.
+
+The scorecard contract, API type-check/build, and web type-check/build passed. This safeguard is designed to protect creator trust and investor-grade measurement quality: a small sample can inform the next test, but it cannot be presented as a reliable causal result or future-performance guarantee.

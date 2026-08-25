@@ -77,7 +77,9 @@ export type ExperimentScorecard = {
   baseline: number | null;
   baselineSampleSize: number;
   decisionState: 'awaiting_metrics' | 'needs_baseline' | 'measuring';
-  variants: Array<{ variantId: string; platform: string; sampleSize: number; observed: number | null; relativeLift: number | null; state: string }>;
+  evidenceQuality: 'directional_only' | 'decision_ready_for_review';
+  canDeclareWinner: boolean;
+  variants: Array<{ variantId: string; platform: string; sampleSize: number; observed: number | null; relativeLift: number | null; state: string; canDeclareWinner: boolean }>;
   safeguards: string[];
 };
 

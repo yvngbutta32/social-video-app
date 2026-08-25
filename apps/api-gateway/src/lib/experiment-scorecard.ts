@@ -27,6 +27,9 @@ function objectiveValue(metric: MetricPoint, objective: ScorecardObjective) {
   return numberValue(metric.views);
 }
 
+const MINIMUM_VARIANT_SAMPLE = 3;
+const MINIMUM_BASELINE_SAMPLE = 5;
+
 export function buildExperimentScorecard(input: {
   objective: ScorecardObjective;
   variants: Array<{ id: string; platform: string; metrics: MetricPoint[] }>;
@@ -43,7 +46,8 @@ export function buildExperimentScorecard(input: {
     const values = [...latestVariantByPost.values()].map((metric) => objectiveValue(metric, input.objective));
     const observed = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
     const relativeLift = baseline && observed !== null ? (observed - baseline) / baseline : null;
-    return { variantId: variant.id, platform: variant.platform, sampleSize: values.length, observed, relativeLift, state: values.length === 0 ? 'awaiting_metrics' : baseline === null ? 'needs_baseline' : 'measuring' as const };
+    const state = values.length === 0 ? 'awaiting_metrics' : baseline === null ? 'needs_baseline' : 'measuring';
+    return { variantId: variant.id, platform: variant.platform, sampleSize: values.length, observed, relativeLift, state, canDeclareWinner: values.length >= MINIMUM_VARIANT_SAMPLE && baselineValues.length >= MINIMUM_BASELINE_SAMPLE };
   });
 
   return {
@@ -52,7 +56,10 @@ export function buildExperimentScorecard(input: {
     baselineSampleSize: baselineValues.length,
     variants,
     decisionState: variants.every((variant) => variant.sampleSize === 0) ? 'awaiting_metrics' : baseline === null ? 'needs_baseline' : 'measuring',
+    evidenceQuality: baselineValues.length < MINIMUM_BASELINE_SAMPLE || variants.some((variant) => variant.sampleSize < MINIMUM_VARIANT_SAMPLE) ? 'directional_only' : 'decision_ready_for_review',
+    canDeclareWinner: baselineValues.length >= MINIMUM_BASELINE_SAMPLE && variants.length > 0 && variants.every((variant) => variant.canDeclareWinner),
     safeguards: [
+      `A decision requires at least ${MINIMUM_VARIANT_SAMPLE} observations per variant and ${MINIMUM_BASELINE_SAMPLE} baseline observations.`,
       'Scores use the latest recorded point per scheduled post to avoid double-counting snapshots.',
       'A relative lift is not causal proof and does not guarantee future performance.',
       'Continue collecting until the learning evaluator confirms a sufficient sample.',
