@@ -42,7 +42,7 @@ import {
 
 
 type StudioStage = 'source' | 'analysis' | 'experiments' | 'ready';
-type PlatformName = 'TikTok' | 'Instagram Reels' | 'YouTube Shorts';
+type PlatformName = 'TikTok' | 'Instagram Reels' | 'YouTube Shorts' | 'Facebook Reels' | 'X' | 'LinkedIn';
 
 type Experiment = {
   id: string;
@@ -77,9 +77,9 @@ type PlanResponse = {
   };
 };
 
-const platformLabels: Record<string, PlatformName> = { tiktok: 'TikTok', instagram: 'Instagram Reels', youtube: 'YouTube Shorts' };
-const platformMarks: Record<string, string> = { tiktok: '♪', instagram: '◎', youtube: '▶' };
-const platformTones: Record<string, string> = { tiktok: 'from-slate-900 to-cyan-600', instagram: 'from-fuchsia-600 via-rose-500 to-amber-400', youtube: 'from-red-600 to-rose-500' };
+const platformLabels: Record<string, PlatformName> = { tiktok: 'TikTok', instagram: 'Instagram Reels', youtube: 'YouTube Shorts', facebook: 'Facebook Reels', x: 'X', linkedin: 'LinkedIn' };
+const platformMarks: Record<string, string> = { tiktok: '♪', instagram: '◎', youtube: '▶', facebook: 'f', x: '𝕏', linkedin: 'in' };
+const platformTones: Record<string, string> = { tiktok: 'from-slate-900 to-cyan-600', instagram: 'from-fuchsia-600 via-rose-500 to-amber-400', youtube: 'from-red-600 to-rose-500', facebook: 'from-blue-700 to-blue-500', x: 'from-slate-900 to-slate-600', linkedin: 'from-sky-800 to-sky-500' };
 
 function mapPlanToExperiments(plan: PlanResponse['data']['experiments']): Experiment[] {
   return plan.map((item, index) => ({
@@ -223,7 +223,7 @@ export default function GrowthStudioPage() {
   const [copied, setCopied] = useState<string | null>(null);
 
   const selectedCount = experiments.filter((experiment) => experiment.selected).length;
-  const selectedPlatforms = useMemo(() => experiments.filter((experiment) => experiment.selected).map((experiment) => ({ TikTok: 'tiktok', 'Instagram Reels': 'instagram', 'YouTube Shorts': 'youtube' }[experiment.platform] || 'youtube')), [experiments]);
+  const selectedPlatforms = useMemo(() => experiments.filter((experiment) => experiment.selected).map((experiment) => Object.entries(platformLabels).find(([, label]) => label === experiment.platform)?.[0]).filter((platform): platform is string => Boolean(platform)), [experiments]);
   const connectedAccountCount = accountsQuery.data?.data.filter((account) => account.isActive).length ?? 0;
   const reachPlanQuery = useQuery({
     queryKey: ['studio', 'reach-plan', sourceId, accessToken, selectedPlatforms.join(',')],

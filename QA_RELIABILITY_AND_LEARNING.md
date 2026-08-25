@@ -93,3 +93,11 @@ The scorecard contract, API type-check/build, and web type-check/build passed. T
 Growth Studio now distinguishes an active creator-connected destination from an official connector that is actually ready for production delivery. A connected account whose platform connector remains unconfigured is labeled `Connected · official connector required` rather than presented as publish-ready. The creator-facing scorecard continues to suppress winner-style percentage claims until minimum evidence thresholds are met.
 
 Web type-check/build and API Growth Studio type-check/build plus contract validation passed. This keeps the premium workflow truthful while official OAuth, publishing, and metrics connectors remain deployment-gated.
+
+## One-source multi-platform creator checkpoint
+
+Growth Studio now supports the complete declared destination set—TikTok, Instagram Reels, YouTube Shorts, Facebook Reels, X, and LinkedIn—when the creator selects experiments. The browser maps selections to the server’s shared platform contract rather than falling back to YouTube for unknown labels. Each destination retains its native tone, mark, and adaptation identity.
+
+Active accounts still show their official connector readiness explicitly. A connected account without a production-tested official connector is not represented as publish-ready, preserving creator control and truthful execution boundaries.
+
+Web type-check/build and API Growth Studio type-check/build plus contract validation passed.
