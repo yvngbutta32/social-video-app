@@ -35,3 +35,11 @@ This checkpoint does **not** claim that ViralBoost can publish to every social p
 ## Database validation boundary
 
 The shared Prisma schema validates successfully and the client was regenerated against the new lifecycle contract. The additive `4_creator_publish_lifecycle` migration has not been applied here because no disposable Docker-capable PostgreSQL target is available in this sandbox. Production rollout remains gated on applying and testing all incremental migrations against a real disposable PostgreSQL instance.
+
+## Authenticated Growth Studio integration
+
+Growth Studio now uses the existing authenticated session bearer token through a typed browser API client and React Query. It loads ready workspace-owned source videos and active creator-authorized destinations, sends live source-fingerprint and experiment-plan requests, refreshes operational readiness and workspace-baseline learning signals, and renders real destination availability instead of presenting static platform readiness.
+
+The local file chooser and example source remain explicitly preview-only because the current video API accepts a source URL and the production upload-to-private-storage pipeline is not yet complete. A selected local file cannot be mistaken for a live source: the interface tells the creator that a workspace source must exist before live analysis or planning can run.
+
+The web type-check and production build passed after the integration. The complete API pilot/platform/Growth Studio contract suite, API type-check/build, and self-hosted intelligence regression checks also passed.

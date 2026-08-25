@@ -1,9 +1,12 @@
 'use client';
 
-import { ChangeEvent, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
+import { apiRequest, type ApiSocialAccount, type ApiVideo, type GrowthPlan, type LearningSignal, type Readiness } from '@/lib/api-client';
 import {
   ArrowLeft,
   ArrowRight,
@@ -55,6 +58,46 @@ type Experiment = {
   tone: string;
   mark: string;
 };
+
+type SessionWithToken = { accessToken?: string };
+
+type FingerprintResponse = {
+  data: {
+    durableSignals: Array<{ label: string; value: string; evidence: string }>;
+  };
+};
+
+type PlanResponse = {
+  data: {
+    sourceVideoId: string;
+    experiments: Array<GrowthPlan & { destination: { username: string | null; displayName: string | null } | null; availability: string }>;
+    missingPlatforms: string[];
+    nextStep: string;
+    safeguards: string[];
+  };
+};
+
+const platformLabels: Record<string, PlatformName> = { tiktok: 'TikTok', instagram: 'Instagram Reels', youtube: 'YouTube Shorts' };
+const platformMarks: Record<string, string> = { tiktok: '♪', instagram: '◎', youtube: '▶' };
+const platformTones: Record<string, string> = { tiktok: 'from-slate-900 to-cyan-600', instagram: 'from-fuchsia-600 via-rose-500 to-amber-400', youtube: 'from-red-600 to-rose-500' };
+
+function mapPlanToExperiments(plan: PlanResponse['data']['experiments']): Experiment[] {
+  return plan.map((item, index) => ({
+    id: `${item.platform}-${index}`,
+    platform: platformLabels[item.platform] || item.platform,
+    handle: item.destination?.username || item.destination?.displayName || 'Connect destination',
+    hook: item.hook,
+    structure: item.changes.slice(0, 2).join(' → '),
+    runtime: item.aspectRatio,
+    window: item.recommendedWindow,
+    confidence: item.availability === 'ready_for_creator_approval' ? 'Ready for approval' : 'Connection required',
+    rationale: item.hypothesis,
+    selected: item.availability === 'ready_for_creator_approval',
+    tone: platformTones[item.platform] || 'from-slate-800 to-slate-600',
+    mark: platformMarks[item.platform] || '•',
+  }));
+}
+
 
 const stageLabels: Array<{ id: StudioStage; label: string; description: string }> = [
   { id: 'source', label: 'Source', description: 'Your original video' },
@@ -127,22 +170,73 @@ function StageIndicator({ current }: { current: StudioStage }) {
 export default function GrowthStudioPage() {
   const [stage, setStage] = useState<StudioStage>('source');
   const [fileName, setFileName] = useState<string | null>(null);
+  const [sourceId, setSourceId] = useState<string | null>(null);
+  const [fingerprintReady, setFingerprintReady] = useState(false);
+  const [fingerprintSignals, setFingerprintSignals] = useState(sourceSignals);
+  const { data: session } = useSession();
+  const accessToken = (session as SessionWithToken | null)?.accessToken;
+
+  const sourcesQuery = useQuery({
+    queryKey: ['studio', 'sources', accessToken],
+    queryFn: () => apiRequest<{ data: ApiVideo[] }>('/videos?status=ready&limit=20', accessToken),
+    enabled: Boolean(accessToken),
+  });
+  const accountsQuery = useQuery({
+    queryKey: ['studio', 'accounts', accessToken],
+    queryFn: () => apiRequest<{ data: ApiSocialAccount[] }>('/accounts?status=active&limit=20', accessToken),
+    enabled: Boolean(accessToken),
+  });
+  const readinessQuery = useQuery({
+    queryKey: ['studio', 'readiness', sourceId, accessToken],
+    queryFn: () => apiRequest<{ data: Readiness }>(`/growth/readiness/${sourceId}`, accessToken),
+    enabled: Boolean(accessToken && sourceId),
+  });
+  const learningQuery = useQuery({
+    queryKey: ['studio', 'learning', sourceId, accessToken],
+    queryFn: () => apiRequest<{ data: LearningSignal }>(`/growth/learning-signal/${sourceId}?objective=retention`, accessToken),
+    enabled: Boolean(accessToken && sourceId),
+  });
+  const fingerprintMutation = useMutation({
+    mutationFn: () => apiRequest<FingerprintResponse>('/growth/source-fingerprint', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId }) }),
+    onSuccess: (response) => { setFingerprintSignals(response.data.durableSignals.map((signal) => ({ label: signal.label, value: signal.value, detail: signal.evidence }))); setFingerprintReady(true); setStage('analysis'); toast.success('Creative fingerprint ready'); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not analyze this source'),
+  });
+  const planMutation = useMutation({
+    mutationFn: (platforms: string[]) => apiRequest<PlanResponse>('/growth/experiment-plan', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId, platforms, objective: 'retention' }) }),
+    onSuccess: (response) => { setExperiments(mapPlanToExperiments(response.data.experiments)); setStage('experiments'); toast.success('Live platform-native experiment slate prepared'); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not prepare the experiment slate'),
+  });
   const [experiments, setExperiments] = useState<Experiment[]>(initialExperiments);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   const selectedCount = experiments.filter((experiment) => experiment.selected).length;
-  const selectedPlatforms = useMemo(() => experiments.filter((experiment) => experiment.selected).map((experiment) => experiment.platform), [experiments]);
+  const selectedPlatforms = useMemo(() => experiments.filter((experiment) => experiment.selected).map((experiment) => ({ TikTok: 'tiktok', 'Instagram Reels': 'instagram', 'YouTube Shorts': 'youtube' }[experiment.platform] || 'youtube')), [experiments]);
+  const connectedAccountCount = accountsQuery.data?.data.filter((account) => account.isActive).length ?? 0;
+
+  useEffect(() => {
+    const firstReadySource = sourcesQuery.data?.data[0];
+    if (firstReadySource && !sourceId) {
+      setSourceId(firstReadySource.id);
+      setFileName(firstReadySource.originalFilename || firstReadySource.title || 'Workspace source video');
+    }
+  }, [sourcesQuery.data, sourceId]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
-    toast.success('Source video added to your private workspace');
+    setSourceId(null);
+    setFingerprintReady(false);
+    setFingerprintSignals(sourceSignals);
+    toast('Local file selected. Upload integration will create a workspace source before analysis.');
   }
 
   function useExampleSource() {
     setFileName('Founder-notes-source.mp4');
+    setSourceId(null);
+    setFingerprintReady(false);
+    setFingerprintSignals(sourceSignals);
     toast('Example source loaded for a private workflow preview');
   }
 
@@ -151,17 +245,20 @@ export default function GrowthStudioPage() {
       toast.error('Add one source video to start the growth loop');
       return;
     }
+    if (!sourceId) {
+      toast.error('Select a ready workspace source to run live analysis. The local file is only a preview until upload is connected.');
+      return;
+    }
     setIsAnalyzing(true);
-    setStage('analysis');
-    window.setTimeout(() => {
-      setIsAnalyzing(false);
-      toast.success('Creative fingerprint ready');
-    }, 1050);
+    fingerprintMutation.mutate(undefined, { onSettled: () => setIsAnalyzing(false) });
   }
 
   function buildExperiments() {
-    setStage('experiments');
-    toast.success('Three platform-native experiments prepared');
+    if (!sourceId) {
+      toast.error('Live experiment planning requires a ready workspace source.');
+      return;
+    }
+    planMutation.mutate(selectedPlatforms.length > 0 ? selectedPlatforms : ['tiktok', 'instagram', 'youtube']);
   }
 
   function toggleExperiment(id: string) {
@@ -181,7 +278,7 @@ export default function GrowthStudioPage() {
       return;
     }
     setStage('ready');
-    toast.success(`${selectedCount} creator-approved experiments are ready for publishing windows`);
+    toast.success(`${selectedCount} experiments confirmed for creator review`);
   }
 
   const stageIndex = stageLabels.findIndex((item) => item.id === stage);
@@ -195,28 +292,32 @@ export default function GrowthStudioPage() {
         <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(310px,0.5fr)]">
           <section className="min-h-[560px] rounded-2xl border border-white/[0.08] bg-[#111720] p-5 shadow-[0_28px_70px_rgba(0,0,0,0.24)] sm:p-7">
             {stage === 'source' && <div className="flex h-full flex-col"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Start with the original</p><h2 className="mt-2 text-xl font-semibold text-white">Add one source video</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Keep it natural. The system will preserve your point of view while finding the strongest scenes, hooks, and platform treatments to test.</p></div><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-300"><Upload className="h-4 w-4" /></span></div>
+              <div className="mt-7 rounded-xl border border-white/[0.07] bg-white/[0.02] p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold text-slate-200">Workspace source library</p><p className="mt-1 text-[11px] text-slate-500">Only processed, workspace-owned sources can enter live analysis.</p></div><span className="text-[10px] font-semibold text-cyan-200">{sourcesQuery.isLoading ? 'Loading…' : `${sourcesQuery.data?.data.length ?? 0} ready`}</span></div>{sourcesQuery.data?.data.length ? <select aria-label="Select a ready workspace source" value={sourceId || ''} onChange={(event) => { const selected = sourcesQuery.data?.data.find((source) => source.id === event.target.value); setSourceId(event.target.value); setFileName(selected?.originalFilename || selected?.title || 'Workspace source video'); setFingerprintReady(false); setStage('source'); }} className="mt-3 w-full rounded-lg border border-white/[0.1] bg-[#0b1119] px-3 py-2.5 text-xs text-slate-200 outline-none focus:border-cyan-300/40"><option value="" disabled>Select a ready source video</option>{sourcesQuery.data.data.map((source) => <option key={source.id} value={source.id}>{source.title || source.originalFilename || source.id}</option>)}</select> : <p className="mt-3 text-[11px] leading-5 text-amber-200/80">No ready source is available yet. A local file selection remains a preview until the upload pipeline creates a private workspace source.</p>}</div>
               <label className={`mt-8 flex min-h-[250px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center transition ${fileName ? 'border-cyan-300/40 bg-cyan-300/[0.05]' : 'border-white/[0.14] bg-white/[0.02] hover:border-cyan-300/45 hover:bg-cyan-300/[0.04]'}`}><input type="file" accept="video/*" className="sr-only" onChange={handleFileChange} /><span className={`flex h-14 w-14 items-center justify-center rounded-2xl ${fileName ? 'bg-cyan-300 text-slate-950' : 'bg-white/[0.07] text-cyan-300'}`}>{fileName ? <Check className="h-6 w-6" /> : <FileVideo className="h-6 w-6" />}</span>{fileName ? <><p className="mt-4 text-sm font-semibold text-cyan-100">{fileName}</p><p className="mt-1.5 text-xs text-slate-500">Added to your private source library · Click to replace</p></> : <><p className="mt-4 text-sm font-semibold text-slate-200">Drop a video here, or choose a file</p><p className="mt-1.5 text-xs text-slate-500">MP4, MOV, or WebM · Original footage stays in your workspace</p></>}<span className="mt-5 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-300">Choose source video</span></label>
               {!fileName && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3"><p className="text-xs text-slate-500">Want to see the workflow first?</p><button type="button" onClick={useExampleSource} className="text-xs font-bold text-cyan-300 transition hover:text-cyan-200">Explore with an example source <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></button></div>}
+              <div className="mt-5 flex items-center justify-between rounded-xl border border-cyan-300/10 bg-cyan-300/[0.04] px-4 py-3"><p className="text-xs text-slate-400">Live API session</p><span className={`text-[10px] font-bold uppercase tracking-[0.12em] ${accessToken ? 'text-emerald-300' : 'text-amber-200'}`}>{accessToken ? 'Authenticated' : 'Preview mode'}</span></div>
               <div className="mt-5 grid gap-3 sm:grid-cols-3">{[{ icon: LockKeyhole, title: 'Private by default', copy: 'Only your workspace and system jobs can access source files.' }, { icon: ScanSearch, title: 'Traceable outputs', copy: 'Every adaptation retains a link back to your original.' }, { icon: ShieldCheck, title: 'Creator controlled', copy: 'Nothing publishes until you review the plan.' }].map((item) => <div key={item.title} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5"><item.icon className="h-4 w-4 text-cyan-300" /><p className="mt-3 text-xs font-semibold text-slate-200">{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{item.copy}</p></div>)}</div>
               <div className="mt-auto flex justify-end border-t border-white/[0.07] pt-6"><Button onClick={analyzeSource} disabled={!fileName || isAnalyzing} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">{isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}{isAnalyzing ? 'Understanding source…' : 'Understand this source'}<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
             </div>}
 
             {stage === 'analysis' && <div className="flex h-full flex-col"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Creative fingerprint</p><h2 className="mt-2 text-xl font-semibold text-white">What this source can carry</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">The system found a clear point of view and several elements worth retaining across adaptations. These are guidance signals, not a promise of performance.</p></div><div className="flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs font-semibold text-emerald-200"><BadgeCheck className="h-4 w-4" />Analysis complete</div></div>
-              <div className="mt-7 grid gap-3 sm:grid-cols-2">{sourceSignals.map((signal, index) => <div key={signal.label} className="rounded-2xl border border-white/[0.07] bg-gradient-to-br from-white/[0.04] to-transparent p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-600">{signal.label}</span><span className={`h-2 w-2 rounded-full ${index === 2 ? 'bg-amber-300' : 'bg-cyan-300'}`} /></div><p className="mt-4 text-base font-semibold text-slate-100">{signal.value}</p><p className="mt-2 text-xs leading-5 text-slate-500">{signal.detail}</p></div>)}</div>
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">{fingerprintSignals.map((signal, index) => <div key={signal.label} className="rounded-2xl border border-white/[0.07] bg-gradient-to-br from-white/[0.04] to-transparent p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-600">{signal.label}</span><span className={`h-2 w-2 rounded-full ${index === 2 ? 'bg-amber-300' : 'bg-cyan-300'}`} /></div><p className="mt-4 text-base font-semibold text-slate-100">{signal.value}</p><p className="mt-2 text-xs leading-5 text-slate-500">{signal.detail}</p></div>)}</div>
               <div className="mt-5 rounded-2xl border border-cyan-300/10 bg-cyan-300/[0.045] p-5"><div className="flex gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-300/10 text-cyan-300"><Lightbulb className="h-4 w-4" /></span><div><p className="text-sm font-semibold text-cyan-100">The system&apos;s working hypothesis</p><p className="mt-1.5 text-sm leading-6 text-slate-400">Your strongest advantage is the tension between a familiar productivity belief and your founder-specific counterpoint. The experiments will vary the opening promise and structure while preserving that proof.</p></div></div></div>
               <div className="mt-5 rounded-xl border border-white/[0.07] bg-black/10 p-4"><div className="flex items-center justify-between"><p className="text-xs font-semibold text-slate-300">Original source retained</p><span className="text-[10px] text-slate-600">{fileName || 'Source video'}</span></div><div className="mt-3 flex items-center gap-3"><div className="flex h-11 w-16 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-slate-800"><Play className="h-4 w-4 fill-white text-white" /></div><div className="flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full w-[42%] rounded-full bg-cyan-300" /></div><div className="mt-2 flex justify-between text-[10px] text-slate-600"><span>00:00</span><span>Strongest hook window: 00:04–00:11</span><span>00:58</span></div></div></div></div>
               <div className="mt-auto flex items-center justify-between border-t border-white/[0.07] pt-6"><button type="button" onClick={() => setStage('source')} className="text-xs font-semibold text-slate-500 hover:text-white">Replace source</button><Button onClick={buildExperiments} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Sparkles className="mr-2 h-4 w-4" />Prepare experiment slate<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
             </div>}
 
             {(stage === 'experiments' || stage === 'ready') && <div className="flex h-full flex-col"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Controlled adaptation plan</p><h2 className="mt-2 text-xl font-semibold text-white">Three experiments, three learning questions</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Each version changes a small number of creative variables. The outcome will update the next recommendations for your own workspace.</p></div><span className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-300">{selectedCount} selected</span></div>
-              <div className="mt-6 space-y-3">{experiments.map((experiment) => <article key={experiment.id} className={`rounded-2xl border p-4 transition sm:p-5 ${experiment.selected ? 'border-cyan-300/25 bg-cyan-300/[0.035]' : 'border-white/[0.07] bg-white/[0.015] opacity-70'}`}><div className="flex gap-3"><button type="button" aria-label={`Toggle ${experiment.platform} experiment`} onClick={() => toggleExperiment(experiment.id)} className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${experiment.selected ? 'border-cyan-300 bg-cyan-300 text-slate-950' : 'border-white/[0.16] bg-white/[0.02] text-transparent'}`}><Check className="h-3 w-3" /></button><div className="min-w-0 flex-1"><div className="flex flex-col justify-between gap-3 sm:flex-row"><div className="flex items-center gap-3"><span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${experiment.tone} text-sm font-bold text-white`}>{experiment.mark}</span><div><p className="text-sm font-semibold text-slate-100">{experiment.platform}</p><p className="mt-0.5 text-xs text-slate-500">{experiment.handle} · {experiment.confidence}</p></div></div><span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold text-slate-400"><Clock3 className="h-3 w-3" />{experiment.window}</span></div><div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px]"><div><div className="flex items-start justify-between gap-3"><p className="text-sm font-medium leading-6 text-cyan-50">{experiment.hook}</p><button type="button" onClick={() => copyHook(experiment)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.06] hover:text-cyan-200" aria-label={`Copy ${experiment.platform} hook`}>{copied === experiment.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}</button></div><p className="mt-2 text-xs leading-5 text-slate-500">{experiment.rationale}</p></div><div className="grid grid-cols-2 gap-2 text-[10px]"><div className="rounded-lg bg-black/15 p-2.5"><p className="text-slate-600">Structure</p><p className="mt-1 font-semibold leading-4 text-slate-300">{experiment.structure}</p></div><div className="rounded-lg bg-black/15 p-2.5"><p className="text-slate-600">Run time</p><p className="mt-1 font-semibold text-slate-300">{experiment.runtime}</p></div></div></div></div></div></article>)}</div>
-              <div className="mt-auto flex flex-col gap-3 border-t border-white/[0.07] pt-6 sm:flex-row sm:items-center sm:justify-between"><p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />The system will only prepare selected versions for their recommended windows. You retain final publishing control.</p>{stage === 'ready' ? <span className="inline-flex items-center gap-2 text-xs font-bold text-emerald-200"><CircleCheck className="h-4 w-4" />Plan is ready to publish</span> : <Button onClick={approvePlan} disabled={selectedCount === 0} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Check className="mr-2 h-4 w-4" />Approve plan ({selectedCount})</Button>}</div>
+              <div className="mt-7 space-y-3">{experiments.map((experiment) => <article key={experiment.id} className={`rounded-2xl border p-4 transition sm:p-5 ${experiment.selected ? 'border-cyan-300/25 bg-cyan-300/[0.035]' : 'border-white/[0.07] bg-white/[0.015] opacity-70'}`}><div className="flex gap-3"><button type="button" aria-label={`Toggle ${experiment.platform} experiment`} onClick={() => toggleExperiment(experiment.id)} className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${experiment.selected ? 'border-cyan-300 bg-cyan-300 text-slate-950' : 'border-white/[0.16] bg-white/[0.02] text-transparent'}`}><Check className="h-3 w-3" /></button><div className="min-w-0 flex-1"><div className="flex flex-col justify-between gap-3 sm:flex-row"><div className="flex items-center gap-3"><span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${experiment.tone} text-sm font-bold text-white`}>{experiment.mark}</span><div><p className="text-sm font-semibold text-slate-100">{experiment.platform}</p><p className="mt-0.5 text-xs text-slate-500">{experiment.handle} · {experiment.confidence}</p></div></div><span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold text-slate-400"><Clock3 className="h-3 w-3" />{experiment.window}</span></div><div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px]"><div><div className="flex items-start justify-between gap-3"><p className="text-sm font-medium leading-6 text-cyan-50">{experiment.hook}</p><button type="button" onClick={() => copyHook(experiment)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.06] hover:text-cyan-200" aria-label={`Copy ${experiment.platform} hook`}>{copied === experiment.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}</button></div><p className="mt-2 text-xs leading-5 text-slate-500">{experiment.rationale}</p></div><div className="grid grid-cols-2 gap-2 text-[10px]"><div className="rounded-lg bg-black/15 p-2.5"><p className="text-slate-600">Structure</p><p className="mt-1 font-semibold leading-4 text-slate-300">{experiment.structure}</p></div><div className="rounded-lg bg-black/15 p-2.5"><p className="text-slate-600">Run time</p><p className="mt-1 font-semibold text-slate-300">{experiment.runtime}</p></div></div></div></div></div></article>)}</div>
+              <div className="mt-auto flex flex-col gap-3 border-t border-white/[0.07] pt-6 sm:flex-row sm:items-center sm:justify-between"><p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />The system only prepares selected versions for review. You retain final publishing control.</p>{stage === 'ready' ? <span className="inline-flex items-center gap-2 text-xs font-bold text-emerald-200"><CircleCheck className="h-4 w-4" />Slate confirmed for creator review</span> : <Button onClick={approvePlan} disabled={selectedCount === 0 || planMutation.isPending} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Check className="mr-2 h-4 w-4" />{planMutation.isPending ? 'Preparing…' : `Confirm slate (${selectedCount})`}</Button>}</div>
             </div>}
           </section>
 
           <aside className="space-y-5"><div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5 shadow-[0_28px_70px_rgba(0,0,0,0.2)]"><div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Your growth loop</p><h2 className="mt-2 text-base font-semibold text-white">What happens next</h2></div><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-400/10 text-violet-300"><Layers3 className="h-4 w-4" /></span></div><div className="mt-6 space-y-0">{[{ title: 'Extract durable signals', description: 'Find the moments, claims, and proof worth keeping.', icon: ScanSearch }, { title: 'Create controlled adaptations', description: 'Change one creative variable at a time across platforms.', icon: WandSparkles }, { title: 'Observe real performance', description: 'Reconcile retention, engagement, and follower signals.', icon: Eye }, { title: 'Update your next plan', description: 'Your results sharpen the next recommendation.', icon: TimerReset }].map((item, index) => { const active = index <= stageIndex; return <div key={item.title} className="relative flex gap-3 pb-5 last:pb-0"><div className="relative z-10"><span className={`flex h-7 w-7 items-center justify-center rounded-lg ${active ? 'bg-cyan-300 text-slate-950' : 'bg-white/[0.06] text-slate-600'}`}><item.icon className="h-3.5 w-3.5" /></span>{index < 3 && <span className={`absolute left-1/2 top-7 h-5 w-px -translate-x-1/2 ${active ? 'bg-cyan-300/40' : 'bg-white/[0.07]'}`} />}</div><div className="pt-1"><p className={`text-xs font-semibold ${active ? 'text-slate-200' : 'text-slate-600'}`}>{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{item.description}</p></div></div>; })}</div></div>
+            {sourceId && <div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5"><div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Operational readiness</p><p className="mt-2 text-sm font-semibold text-white">{readinessQuery.isLoading ? 'Checking workflow…' : readinessQuery.data?.data.state.replaceAll('_', ' ') || 'Awaiting API'}</p></div><span className={`h-2.5 w-2.5 rounded-full ${readinessQuery.data?.data.state === 'attention_required' ? 'bg-amber-300' : 'bg-emerald-300'}`} /></div><p className="mt-2 text-[11px] leading-5 text-slate-500">{readinessQuery.data?.data.reasons[0] || 'The source is visible to the authenticated workspace and ready for the next controlled step.'}</p></div>}
+            {sourceId && <div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5"><div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Evidence signal</p><p className="mt-2 text-sm font-semibold text-white">{learningQuery.isLoading ? 'Collecting workspace evidence…' : learningQuery.data?.data.decision.replaceAll('_', ' ') || 'Awaiting measurements'}</p></div><span className="rounded-full bg-cyan-300/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-cyan-200">{learningQuery.data?.data.confidence || 'low'}</span></div><p className="mt-2 text-[11px] leading-5 text-slate-500">{learningQuery.data?.data.explanation || 'Results are evaluated against this creator’s own baseline; early signals should not be treated as a prediction.'}</p></div>}
             <div className="rounded-2xl border border-cyan-300/10 bg-gradient-to-br from-cyan-300/[0.08] to-violet-400/[0.04] p-5"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200"><Flame className="h-4 w-4" /></div><p className="mt-4 text-sm font-semibold text-cyan-50">Build an advantage, not just volume.</p><p className="mt-2 text-xs leading-5 text-slate-500">This workspace uses the performance of your approved experiments to improve future recommendations. It does not promise virality or control a platform&apos;s feed.</p></div>
-            <div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5"><div className="flex items-center justify-between"><p className="text-sm font-semibold text-white">Connected destinations</p><Link href="/dashboard" className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200">Manage</Link></div><div className="mt-4 space-y-3">{[{ name: 'TikTok', state: 'Ready', mark: '♪', tone: 'bg-slate-950' }, { name: 'Instagram Reels', state: 'Ready', mark: '◎', tone: 'bg-gradient-to-br from-fuchsia-600 to-orange-400' }, { name: 'YouTube Shorts', state: 'Ready', mark: '▶', tone: 'bg-red-500' }].map((item) => <div key={item.name} className="flex items-center gap-3"><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${item.tone} text-xs font-bold text-white`}>{item.mark}</span><div className="flex-1"><p className="text-xs font-semibold text-slate-300">{item.name}</p><p className="mt-0.5 text-[10px] text-emerald-300">{item.state} to receive approved plan</p></div><ChevronRight className="h-3.5 w-3.5 text-slate-600" /></div>)}</div></div>
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5"><div className="flex items-center justify-between"><p className="text-sm font-semibold text-white">Connected destinations</p><span className="text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200">{connectedAccountCount} active</span></div><p className="mt-2 text-[11px] leading-5 text-slate-500">Live planning only includes creator-authorized active destinations.</p><Link href="/dashboard" className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200">Manage</Link></div><div className="mt-4 space-y-3">{accountsQuery.isLoading ? <p className="text-[11px] text-slate-500">Checking creator-authorized destinations…</p> : accountsQuery.data?.data.length ? accountsQuery.data.data.map((account) => <div key={account.id} className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.06] text-xs font-bold uppercase text-cyan-200">{(platformLabels[account.platform] || account.platform).slice(0, 1)}</span><div className="flex-1"><p className="text-xs font-semibold text-slate-300">{platformLabels[account.platform] || account.platform}</p><p className="mt-0.5 text-[10px] text-emerald-300">Active · {account.username || account.displayName || 'creator destination'}</p></div><ChevronRight className="h-3.5 w-3.5 text-slate-600" /></div>) : <p className="text-[11px] leading-5 text-amber-200/80">No active creator-authorized destinations are connected yet.</p>}</div>
           </aside>
         </div>
 
