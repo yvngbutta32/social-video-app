@@ -140,6 +140,9 @@ async function main() {
   assert.match(growthRoute, /video\.status !== 'ready'/);
   assert.match(growthRoute, /No experiment is scheduled or published by this endpoint/);
   assert.match(growthRoute, /account_connection_required/);
+  assert.match(growthRoute, /variant_rendering_required/);
+  assert.match(growthRoute, /variantId/);
+  assert.match(growthRoute, /generationParams/);
   assert.match(growthRoute, /learning-signal/);
   assert.match(growthRoute, /evaluateLearningSignal/);
   assert.match(growthRoute, /readiness/);
@@ -165,6 +168,7 @@ async function main() {
   assert.match(publishingRoute, /creator_publish_intent_approved/);
   assert.match(publishingRoute, /publishingAttempt\.create/);
   assert.match(publishingRoute, /official_creator_authorized_connection_required/);
+  assert.match(publishingRoute, /variantReady/);
 
   const videoRoute = await readFile(new URL('../src/routes/videos.ts', import.meta.url), 'utf8');
   assert.match(videoRoute, /app\.post\('\/upload'/);

@@ -101,3 +101,11 @@ Growth Studio now supports the complete declared destination set—TikTok, Insta
 Active accounts still show their official connector readiness explicitly. A connected account without a production-tested official connector is not represented as publish-ready, preserving creator control and truthful execution boundaries.
 
 Web type-check/build and API Growth Studio type-check/build plus contract validation passed.
+
+## Durable multi-platform experiment checkpoint
+
+The live experiment-plan endpoint now creates or reuses workspace-owned `VideoVariant` records using a deterministic plan key. The response includes a durable `variantId`, while active destinations remain marked `variant_rendering_required` until the processor produces a ready asset. This closes the gap between a transient planning response and the later creator approval/publishing lifecycle.
+
+The browser uses the durable variant ID for experiment identity and labels pending variants as rendering required rather than approval-ready. The source, variant, destination, approval, scheduling, and delivery boundaries remain separate.
+
+Growth, pilot, and platform contracts, API type-check/build, and web type-check/build passed.

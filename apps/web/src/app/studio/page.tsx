@@ -70,7 +70,7 @@ type FingerprintResponse = {
 type PlanResponse = {
   data: {
     sourceVideoId: string;
-    experiments: Array<GrowthPlan & { destination: { username: string | null; displayName: string | null } | null; availability: string }>;
+    experiments: Array<GrowthPlan & { variantId: string; destination: { username: string | null; displayName: string | null } | null; availability: string }>;
     missingPlatforms: string[];
     nextStep: string;
     safeguards: string[];
@@ -83,14 +83,14 @@ const platformTones: Record<string, string> = { tiktok: 'from-slate-900 to-cyan-
 
 function mapPlanToExperiments(plan: PlanResponse['data']['experiments']): Experiment[] {
   return plan.map((item, index) => ({
-    id: `${item.platform}-${index}`,
+    id: item.variantId || `${item.platform}-${index}`,
     platform: platformLabels[item.platform] || item.platform,
     handle: item.destination?.username || item.destination?.displayName || 'Connect destination',
     hook: item.hook,
     structure: item.changes.slice(0, 2).join(' → '),
     runtime: item.aspectRatio,
     window: item.recommendedWindow,
-    confidence: item.availability === 'ready_for_creator_approval' ? 'Ready for approval' : 'Connection required',
+    confidence: item.availability === 'ready_for_creator_approval' ? 'Ready for approval' : item.availability === 'variant_rendering_required' ? 'Rendering required' : 'Connection required',
     rationale: item.hypothesis,
     selected: item.availability === 'ready_for_creator_approval',
     tone: platformTones[item.platform] || 'from-slate-800 to-slate-600',

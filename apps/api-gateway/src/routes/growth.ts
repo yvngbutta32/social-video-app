@@ -145,7 +145,7 @@ export function createGrowthRoutes() {
         platform: { in: input.platforms },
         isActive: true,
       },
-      select: { platform: true, username: true, displayName: true },
+      select: { id: true, platform: true, username: true, displayName: true },
     });
 
     const connectedPlatforms = new Set(accounts.map((account) => account.platform));
@@ -156,25 +156,36 @@ export function createGrowthRoutes() {
       transcript: video.transcript,
       platforms: requestedPlatforms,
       objective: input.objective as GrowthObjective,
-    }).map((experiment) => ({
-      ...experiment,
-      destination: accounts.find((account) => account.platform === experiment.platform) ?? null,
-      availability: connectedPlatforms.has(experiment.platform) ? 'ready_for_creator_approval' : 'account_connection_required',
-    }));
+    });
+    const persistedVariants = await prisma.$transaction(async (tx) => Promise.all(experiments.map(async (experiment) => {
+      const planKey = `${video.id}:${experiment.platform}:${input.objective}`;
+      const candidates = await tx.videoVariant.findMany({ where: { videoId: video.id, platform: experiment.platform, variantType: experiment.variantType }, select: { id: true, generationParams: true, status: true } });
+      const existing = candidates.find((candidate) => (candidate.generationParams as { planKey?: string } | null)?.planKey === planKey);
+      if (existing) {
+        return tx.videoVariant.update({ where: { id: existing.id }, data: { hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
+      }
+      return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
+    })));
+    const experimentsWithVariants = experiments.map((experiment, index) => {
+      const destination = accounts.find((account) => account.platform === experiment.platform) ?? null;
+      const variant = persistedVariants[index];
+      return { ...experiment, variantId: variant.id, destination, availability: !connectedPlatforms.has(experiment.platform) ? 'account_connection_required' : variant.status === 'ready' ? 'ready_for_creator_approval' : 'variant_rendering_required' };
+    });
 
     return c.json({
       data: {
         sourceVideoId: video.id,
         objective: input.objective,
-        experiments,
+        experiments: experimentsWithVariants,
         missingPlatforms,
         nextStep: missingPlatforms.length > 0
-          ? 'Connect the missing accounts before approving those experiments.'
-          : 'Review the planned experiments, then explicitly approve the versions you want prepared for publishing.',
+          ? 'Connect the missing accounts and wait for variant rendering before approving those experiments.'
+          : 'Review the planned experiments. Variants must finish rendering before explicit creator approval can prepare them for publishing.',
         safeguards: [
           'The system prepares creator-specific hypotheses and does not guarantee reach, virality, or platform placement.',
           'No experiment is scheduled or published by this endpoint.',
-          'Approved publishing requires a separate creator action and active connected account.',
+          'Approved publishing requires a rendered variant, separate creator action, and active connected account.',
+          'Planning creates a pending variant record; it does not claim that media rendering has completed.',
         ],
       },
     });
