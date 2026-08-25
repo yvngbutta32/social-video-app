@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { buildGrowthExperimentPlan } from '../src/lib/growth-plan.js';
 import { evaluateLearningSignal } from '../src/lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness, decideRetry } from '../src/lib/reliability.js';
+import { createAttemptIdempotencyKey, resolvePublishAttemptOutcome, validateCreatorApproval } from '../src/lib/publishing-lifecycle.js';
 
 async function main() {
   const plan = buildGrowthExperimentPlan({
@@ -82,6 +83,35 @@ async function main() {
   assert.equal(decideRetry({ retryCount: 3, responseStatus: 503 }).exhausted, true);
   assert.equal(decideRetry({ retryCount: 0, responseStatus: 400 }).retryable, false);
 
+  const approval = validateCreatorApproval({
+    postStatus: 'draft',
+    sourceReady: true,
+    variantReady: true,
+    destinationActive: true,
+  });
+  assert.equal(approval.approved, true);
+  assert(approval.safeguards.some((guardrail) => /does not guarantee/i.test(guardrail)));
+
+  const blockedApproval = validateCreatorApproval({
+    postStatus: 'draft',
+    sourceReady: false,
+    variantReady: true,
+    destinationActive: false,
+  });
+  assert.equal(blockedApproval.approved, false);
+  assert.equal(blockedApproval.reasons.length, 2);
+  assert.equal(createAttemptIdempotencyKey('creator-intent-123456', 2), 'creator-intent-123456:attempt:2');
+
+  const retryOutcome = resolvePublishAttemptOutcome({ retryCountBeforeAttempt: 0, responseStatus: 503, succeeded: false });
+  assert.equal(retryOutcome.attemptStatus, 'retry_scheduled');
+  assert.equal(retryOutcome.postStatus, 'scheduled');
+  assert.equal(retryOutcome.deadLetter, false);
+
+  const deadLetterOutcome = resolvePublishAttemptOutcome({ retryCountBeforeAttempt: 3, responseStatus: 503, succeeded: false });
+  assert.equal(deadLetterOutcome.attemptStatus, 'dead_lettered');
+  assert.equal(deadLetterOutcome.postStatus, 'failed');
+  assert.equal(deadLetterOutcome.deadLetter, true);
+
   const growthRoute = await readFile(new URL('../src/routes/growth.ts', import.meta.url), 'utf8');
   assert.match(growthRoute, /requireWorkspaceAccess\(actor, video\.workspaceId\)/);
   assert.match(growthRoute, /video\.status !== 'ready'/);
@@ -91,6 +121,17 @@ async function main() {
   assert.match(growthRoute, /evaluateLearningSignal/);
   assert.match(growthRoute, /readiness/);
   assert.match(growthRoute, /assessCreatorWorkflowReadiness/);
+
+  const publishingRoute = await readFile(new URL('../src/routes/publishing.ts', import.meta.url), 'utf8');
+  assert.match(publishingRoute, /Platform oversight is read-only/);
+  assert.match(publishingRoute, /creator_publish_intent_approved/);
+  assert.match(publishingRoute, /publishingAttempt\.create/);
+  assert.match(publishingRoute, /official_creator_authorized_connection_required/);
+
+  const lifecycleMigration = await readFile(new URL('../../web/prisma/migrations/4_creator_publish_lifecycle/migration.sql', import.meta.url), 'utf8');
+  assert.match(lifecycleMigration, /publishing_attempts/);
+  assert.match(lifecycleMigration, /idempotency_key/);
+  assert.match(lifecycleMigration, /dead_lettered_at/);
 
   console.log('Growth-plan verification passed.');
   console.log(`Verified ${plan.length} transparent platform experiments and creator-approval safeguards.`);

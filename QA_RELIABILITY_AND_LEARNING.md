@@ -17,3 +17,21 @@ Webhook retries now use a bounded, deterministic retry policy. Transient, rate-l
 ## Test evidence
 
 The API pilot, platform-contract, and Growth Studio contract suites all passed. The API gateway’s strict TypeScript validation and production build both passed after the learning, readiness, and retry safeguards were added.
+
+## Creator-controlled publish lifecycle checkpoint
+
+The platform now persists a **draft creator publish intent** separately from creator approval. A creator workspace member may create a future-dated intent only when its source, prepared version, and destination are compatible and belong to the same workspace. The platform-owner oversight identity is explicitly refused for all create and approval mutations.
+
+| Lifecycle concern | Persisted control | Verification outcome |
+|---|---|---|
+| Duplicate requests | Workspace-scoped idempotency key on `scheduled_posts` | Repeated create request returns the original intent rather than creating a second schedule. |
+| Explicit consent | `creator_approved_at` and `creator_approved_by` | Approval is accepted only for a draft with a ready source, ready version, and active creator-owned destination. |
+| Queue traceability | `publishing_attempts` with unique post/attempt and workspace/idempotency constraints | Approval creates an initial immutable queued attempt record. |
+| Recovery state | Retry count, last/next attempt timestamps, and dead-letter timestamp | Deterministic retry logic returns either a scheduled recovery window or terminal dead-letter outcome. |
+| Forensics | Workspace-scoped audit events in the same transaction as create and approval changes | Creator intent and approval state changes are attributable to the requesting workspace user. |
+
+This checkpoint does **not** claim that ViralBoost can publish to every social platform. It creates the safe, auditable scheduling and recovery contract required for a future worker that uses each creator’s authorized official platform connection. No publishing worker or platform ranking control has been asserted or tested in this sandbox.
+
+## Database validation boundary
+
+The shared Prisma schema validates successfully and the client was regenerated against the new lifecycle contract. The additive `4_creator_publish_lifecycle` migration has not been applied here because no disposable Docker-capable PostgreSQL target is available in this sandbox. Production rollout remains gated on applying and testing all incremental migrations against a real disposable PostgreSQL instance.

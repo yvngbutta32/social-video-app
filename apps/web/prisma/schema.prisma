@@ -50,8 +50,9 @@ model Workspace {
   abTests         ABTest[]
   hooks           Hook[]
   retentionCurves RetentionCurve[]
-  scheduledPosts  ScheduledPost[]
-  socialAccounts  SocialAccount[]
+  scheduledPosts     ScheduledPost[]
+  publishingAttempts PublishingAttempt[]
+  socialAccounts     SocialAccount[]
   subscriptions   Subscription[]
   videos          Video[]
   members         WorkspaceMember[]
@@ -230,8 +231,14 @@ model ScheduledPost {
   postedAt        DateTime?        @map("posted_at")
   platformPostId  String?          @map("platform_post_id")
   errorMessage    String?          @map("error_message")
-  retryCount      Int              @default(0) @map("retry_count")
-  abTestId        String?          @map("ab_test_id")
+  retryCount        Int                @default(0) @map("retry_count")
+  creatorApprovedAt DateTime?          @map("creator_approved_at")
+  creatorApprovedBy String?            @map("creator_approved_by")
+  idempotencyKey    String?            @map("idempotency_key")
+  lastAttemptAt     DateTime?          @map("last_attempt_at")
+  nextAttemptAt     DateTime?          @map("next_attempt_at")
+  deadLetteredAt    DateTime?          @map("dead_lettered_at")
+  abTestId          String?            @map("ab_test_id")
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
   abTestVariant   String?          @map("ab_test_variant")
@@ -239,12 +246,14 @@ model ScheduledPost {
   platformUrl     String?          @map("platform_url")
   status          PostStatus       @default(draft)
   metrics         PostMetric[]
-  retentionCurves RetentionCurve[]
-  abTest          ABTest?          @relation("ABTestVariants", fields: [abTestId], references: [id])
+  retentionCurves    RetentionCurve[]
+  publishingAttempts PublishingAttempt[]
+  abTest             ABTest?          @relation("ABTestVariants", fields: [abTestId], references: [id])
   socialAccount   SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
   variant         VideoVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
   workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId])
   @@index([variantId])
   @@index([socialAccountId])
@@ -256,6 +265,31 @@ model ScheduledPost {
   @@index([variantId], map: "idx_scheduled_variant")
   @@index([workspaceId], map: "idx_scheduled_workspace")
   @@map("scheduled_posts")
+}
+
+model PublishingAttempt {
+  id              String               @id @default(uuid())
+  scheduledPostId String               @map("scheduled_post_id")
+  workspaceId     String               @map("workspace_id")
+  idempotencyKey  String               @map("idempotency_key")
+  attemptNumber   Int                  @map("attempt_number")
+  status          PublishAttemptStatus @default(queued)
+  requestedAt     DateTime             @default(now()) @map("requested_at")
+  startedAt       DateTime?            @map("started_at")
+  completedAt     DateTime?            @map("completed_at")
+  nextAttemptAt   DateTime?            @map("next_attempt_at")
+  responseStatus  Int?                 @map("response_status")
+  errorCode       String?              @map("error_code")
+  errorMessage    String?              @map("error_message")
+  metadata        Json                 @default("{}")
+  scheduledPost   ScheduledPost        @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+  workspace       Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduledPostId, attemptNumber])
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, status, requestedAt(sort: Desc)])
+  @@index([scheduledPostId, requestedAt(sort: Desc)])
+  @@map("publishing_attempts")
 }
 
 model ABTest {
@@ -766,6 +800,15 @@ enum PostStatus {
   posting
   posted
   failed
+  cancelled
+}
+
+enum PublishAttemptStatus {
+  queued
+  attempting
+  succeeded
+  retry_scheduled
+  dead_lettered
   cancelled
 }
 
