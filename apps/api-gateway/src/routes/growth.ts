@@ -12,6 +12,8 @@ import {
   type GrowthPlatform,
 } from '../lib/growth-plan.js';
 import { requireWorkspaceAccess } from '../lib/pilot-access.js';
+import { evaluateLearningSignal } from '../lib/growth-learning.js';
+import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
 
 const sourceSchema = z.object({
   videoId: z.string().uuid(),
@@ -19,6 +21,10 @@ const sourceSchema = z.object({
 
 const planSchema = sourceSchema.extend({
   platforms: z.array(z.enum(supportedGrowthPlatforms)).min(1).max(supportedGrowthPlatforms.length),
+  objective: z.enum(['views', 'engagement', 'followers', 'retention']).default('retention'),
+});
+
+const learningQuerySchema = z.object({
   objective: z.enum(['views', 'engagement', 'followers', 'retention']).default('retention'),
 });
 
@@ -168,6 +174,111 @@ export function createGrowthRoutes() {
           'No experiment is scheduled or published by this endpoint.',
           'Approved publishing requires a separate creator action and active connected account.',
         ],
+      },
+    });
+  });
+
+  app.get('/readiness/:videoId', async (c: any) => {
+    const actor = c.get('user');
+    const videoId = c.req.param('videoId');
+
+    const video = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { id: true, workspaceId: true, status: true },
+    });
+
+    if (!video) {
+      throw new HTTPException(404, { message: 'Source video not found' });
+    }
+
+    await requireWorkspaceAccess(actor, video.workspaceId);
+
+    const [connectedDestinations, variants] = await Promise.all([
+      prisma.socialAccount.count({ where: { workspaceId: video.workspaceId, isActive: true } }),
+      prisma.videoVariant.findMany({
+        where: { videoId: video.id },
+        select: {
+          status: true,
+          scheduledPosts: { select: { status: true, retryCount: true, errorMessage: true } },
+        },
+      }),
+    ]);
+
+    const readiness = assessCreatorWorkflowReadiness({
+      sourceStatus: video.status,
+      connectedDestinations,
+      preparedVariants: variants.filter((variant) => variant.status === 'ready').length,
+      failedVariants: variants.filter((variant) => variant.status === 'failed').length,
+      scheduledPosts: variants.flatMap((variant) => variant.scheduledPosts),
+    });
+
+    return c.json({ data: { sourceVideoId: video.id, ...readiness } });
+  });
+
+  app.get('/learning-signal/:videoId', zValidator('query', learningQuerySchema), async (c: any) => {
+    const actor = c.get('user');
+    const videoId = c.req.param('videoId');
+    const query = c.req.valid('query');
+
+    const video = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: { id: true, workspaceId: true },
+    });
+
+    if (!video) {
+      throw new HTTPException(404, { message: 'Source video not found' });
+    }
+
+    await requireWorkspaceAccess(actor, video.workspaceId);
+
+    const variants = await prisma.videoVariant.findMany({
+      where: { videoId: video.id },
+      select: {
+        id: true,
+        metrics: {
+          select: {
+            views: true,
+            likes: true,
+            comments: true,
+            shares: true,
+            saves: true,
+            followerGain: true,
+            completionRate: true,
+          },
+        },
+      },
+    });
+
+    const variantIds = variants.map((variant) => variant.id);
+    const baselineMetrics = await prisma.postMetric.findMany({
+      where: {
+        workspaceId: video.workspaceId,
+        ...(variantIds.length > 0 ? { variantId: { notIn: variantIds } } : {}),
+      },
+      select: {
+        views: true,
+        likes: true,
+        comments: true,
+        shares: true,
+        saves: true,
+        followerGain: true,
+        completionRate: true,
+      },
+      orderBy: { recordedAt: 'desc' },
+      take: 100,
+    });
+
+    const experimentMetrics = variants.flatMap((variant) => variant.metrics);
+    const learning = evaluateLearningSignal({
+      objective: query.objective as GrowthObjective,
+      experiment: experimentMetrics,
+      baseline: baselineMetrics,
+    });
+
+    return c.json({
+      data: {
+        sourceVideoId: video.id,
+        ...learning,
       },
     });
   });

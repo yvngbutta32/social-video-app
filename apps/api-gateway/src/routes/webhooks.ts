@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma.js';
 import axios from 'axios';
 import crypto from 'crypto';
 import type { Variables } from '../index.js';
+import { decideRetry, type RetryPolicy } from '../lib/reliability.js';
 
 const webhookSchema = z.object({
   name: z.string().min(1).max(100),
@@ -366,7 +367,18 @@ export function createWebhookRoutes() {
       throw new HTTPException(404, { message: 'Delivery not found' });
     }
     
-    // Retry the delivery
+    const retryPolicy = webhook.retryPolicy as unknown as Partial<RetryPolicy>;
+    const priorDecision = decideRetry({
+      retryCount: delivery.retryCount,
+      responseStatus: delivery.responseStatus,
+      policy: retryPolicy,
+    });
+
+    if (!priorDecision.retryable) {
+      return c.json({ success: false, message: priorDecision.reason, retry: priorDecision }, 409);
+    }
+
+    // Retry the delivery within its configured recovery budget.
     try {
       const response = await axios.post(webhook.url, delivery.payload, {
         headers: {
@@ -386,19 +398,22 @@ export function createWebhookRoutes() {
         },
       });
       
-      return c.json({ success: true, message: 'Delivery retried', status: response.status });
+      return c.json({ success: true, message: 'Delivery retried', status: response.status, retry: { retryable: false, exhausted: false, nextDelayMs: null, reason: 'Delivery recovered successfully.' } });
     } catch (err: any) {
+      const responseStatus = err.response?.status || 0;
+      const retryCount = delivery.retryCount + 1;
+      const retry = decideRetry({ retryCount, responseStatus, policy: retryPolicy });
       await prisma.webhookDelivery.update({
         where: { id: deliveryId },
         data: {
-          responseStatus: err.response?.status || 0,
+          responseStatus,
           responseBody: err.response?.data ? JSON.stringify(err.response.data) : String(err),
           success: false,
-          retryCount: delivery.retryCount + 1,
+          retryCount,
         },
       });
       
-      return c.json({ success: false, message: 'Retry failed', error: String(err) });
+      return c.json({ success: false, message: 'Retry failed', error: String(err), retry });
     }
   });
 
