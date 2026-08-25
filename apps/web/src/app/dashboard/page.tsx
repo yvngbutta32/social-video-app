@@ -59,6 +59,7 @@ type Campaign = {
 
 const navigation: Array<{ label: string; href: string; icon: LucideIcon; active?: boolean }> = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard, active: true },
+  { label: 'Growth studio', href: '/studio', icon: Sparkles },
   { label: 'Campaigns', href: '#campaigns', icon: Target },
   { label: 'Content library', href: '#content', icon: Library },
   { label: 'Analytics', href: '#analytics', icon: BarChart3 },

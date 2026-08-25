@@ -1,0 +1,227 @@
+'use client';
+
+import { ChangeEvent, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { toast } from 'react-hot-toast';
+import { Button } from '@/components/ui/button';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  Check,
+  ChevronRight,
+  CircleCheck,
+  Clock3,
+  Copy,
+  Eye,
+  FileVideo,
+  Film,
+  Flame,
+  Info,
+  Layers3,
+  LayoutDashboard,
+  Lightbulb,
+  Loader2,
+  LockKeyhole,
+  MoreHorizontal,
+  Play,
+  Plus,
+  ScanSearch,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  TimerReset,
+  Upload,
+  Video,
+  WandSparkles,
+  X,
+} from 'lucide-react';
+
+
+type StudioStage = 'source' | 'analysis' | 'experiments' | 'ready';
+type PlatformName = 'TikTok' | 'Instagram Reels' | 'YouTube Shorts';
+
+type Experiment = {
+  id: string;
+  platform: PlatformName;
+  handle: string;
+  hook: string;
+  structure: string;
+  runtime: string;
+  window: string;
+  confidence: string;
+  rationale: string;
+  selected: boolean;
+  tone: string;
+  mark: string;
+};
+
+const stageLabels: Array<{ id: StudioStage; label: string; description: string }> = [
+  { id: 'source', label: 'Source', description: 'Your original video' },
+  { id: 'analysis', label: 'Understand', description: 'Creative fingerprint' },
+  { id: 'experiments', label: 'Adapt', description: 'Platform-native tests' },
+  { id: 'ready', label: 'Launch', description: 'Creator approval' },
+];
+
+const initialExperiments: Experiment[] = [
+  {
+    id: 'tiktok-curiosity',
+    platform: 'TikTok',
+    handle: '@jordanbuilds',
+    hook: '“I stopped treating productivity like a personality trait.”',
+    structure: 'Pattern interrupt → 3 reframes → open-loop payoff',
+    runtime: '24 sec',
+    window: 'Today · 7:40 PM',
+    confidence: 'High confidence',
+    rationale: 'Your direct, contrarian opener has produced the strongest first-hour saves in this content pillar.',
+    selected: true,
+    tone: 'from-slate-900 to-cyan-600',
+    mark: '♪',
+  },
+  {
+    id: 'reels-transformation',
+    platform: 'Instagram Reels',
+    handle: '@jordanbuilds',
+    hook: '“The reset that gave me my best Mondays back.”',
+    structure: 'Outcome first → visual reset montage → 3-step replay',
+    runtime: '31 sec',
+    window: 'Tomorrow · 9:15 AM',
+    confidence: 'High confidence',
+    rationale: 'Your audience has a strong morning save-and-share pattern around routine content.',
+    selected: true,
+    tone: 'from-fuchsia-600 via-rose-500 to-amber-400',
+    mark: '◎',
+  },
+  {
+    id: 'shorts-authority',
+    platform: 'YouTube Shorts',
+    handle: 'Jordan Builds',
+    hook: '“Three habits I removed before trying to add another.”',
+    structure: 'List promise → proof clip → concise takeaway',
+    runtime: '38 sec',
+    window: 'Tomorrow · 12:10 PM',
+    confidence: 'Learning test',
+    rationale: 'This tests whether a clearer list structure improves completion without losing your founder voice.',
+    selected: true,
+    tone: 'from-red-600 to-rose-500',
+    mark: '▶',
+  },
+];
+
+const sourceSignals = [
+  { label: 'Content pillar', value: 'Founder habits', detail: 'Matches 7 previous source assets' },
+  { label: 'Audience promise', value: 'Less noise, more focus', detail: 'Clear practical transformation' },
+  { label: 'Strongest raw moment', value: '00:04–00:11', detail: 'Opinion shift + direct eye line' },
+  { label: 'Reusable proof', value: 'Personal before / after', detail: 'Retain in all adaptations' },
+];
+
+function StageIndicator({ current }: { current: StudioStage }) {
+  const activeIndex = stageLabels.findIndex((stage) => stage.id === current);
+  return <ol className="grid gap-2 sm:grid-cols-4">{stageLabels.map((stage, index) => {
+    const complete = index < activeIndex;
+    const active = index === activeIndex;
+    return <li key={stage.id} className={`relative overflow-hidden rounded-xl border px-3 py-3 transition ${active ? 'border-cyan-300/40 bg-cyan-300/[0.08]' : complete ? 'border-emerald-400/20 bg-emerald-400/[0.05]' : 'border-white/[0.07] bg-white/[0.02]'}`}><div className="flex items-center gap-2"><span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${complete ? 'bg-emerald-400 text-slate-950' : active ? 'bg-cyan-300 text-slate-950' : 'bg-white/[0.07] text-slate-500'}`}>{complete ? <Check className="h-3 w-3" /> : index + 1}</span><span className={`text-xs font-bold ${active ? 'text-cyan-100' : complete ? 'text-emerald-200' : 'text-slate-500'}`}>{stage.label}</span></div><p className="mt-1.5 pl-7 text-[10px] text-slate-600">{stage.description}</p></li>;
+  })}</ol>;
+}
+
+export default function GrowthStudioPage() {
+  const [stage, setStage] = useState<StudioStage>('source');
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [experiments, setExperiments] = useState<Experiment[]>(initialExperiments);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const selectedCount = experiments.filter((experiment) => experiment.selected).length;
+  const selectedPlatforms = useMemo(() => experiments.filter((experiment) => experiment.selected).map((experiment) => experiment.platform), [experiments]);
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    toast.success('Source video added to your private workspace');
+  }
+
+  function useExampleSource() {
+    setFileName('Founder-notes-source.mp4');
+    toast('Example source loaded for a private workflow preview');
+  }
+
+  function analyzeSource() {
+    if (!fileName) {
+      toast.error('Add one source video to start the growth loop');
+      return;
+    }
+    setIsAnalyzing(true);
+    setStage('analysis');
+    window.setTimeout(() => {
+      setIsAnalyzing(false);
+      toast.success('Creative fingerprint ready');
+    }, 1050);
+  }
+
+  function buildExperiments() {
+    setStage('experiments');
+    toast.success('Three platform-native experiments prepared');
+  }
+
+  function toggleExperiment(id: string) {
+    setExperiments((current) => current.map((experiment) => experiment.id === id ? { ...experiment, selected: !experiment.selected } : experiment));
+  }
+
+  function copyHook(experiment: Experiment) {
+    navigator.clipboard?.writeText(experiment.hook);
+    setCopied(experiment.id);
+    toast.success('Hook copied');
+    window.setTimeout(() => setCopied(null), 1200);
+  }
+
+  function approvePlan() {
+    if (selectedCount === 0) {
+      toast.error('Select at least one experiment to prepare');
+      return;
+    }
+    setStage('ready');
+    toast.success(`${selectedCount} creator-approved experiments are ready for publishing windows`);
+  }
+
+  const stageIndex = stageLabels.findIndex((item) => item.id === stage);
+
+  return (
+    <div className="min-h-screen bg-[#090d13] text-white">
+      <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#090d13]/90 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-[1540px] items-center justify-between px-4 sm:px-6 lg:px-8"><div className="flex items-center gap-3"><Link href="/dashboard" className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-400 transition hover:bg-white/[0.08] hover:text-white" aria-label="Return to dashboard"><ArrowLeft className="h-4 w-4" /></Link><div><p className="text-sm font-bold tracking-tight text-white">Growth Studio</p><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-300">Creator workspace</p></div></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-200 sm:flex"><CircleCheck className="h-3.5 w-3.5" />Private workspace</div><Link href="/dashboard" className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"><LayoutDashboard className="h-3.5 w-3.5" />Overview</Link></div></div></header>
+
+      <main className="mx-auto max-w-[1540px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10"><div className="mx-auto max-w-5xl"><div className="text-center"><div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/15 bg-cyan-300/[0.05] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-200"><WandSparkles className="h-3.5 w-3.5" />One source. A smarter growth loop.</div><h1 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Turn what you already made into<br /><span className="text-slate-500">better platform-native experiments.</span></h1><p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-400">Upload a source video. ViralBoost identifies the durable creative signal, prepares controlled adaptations for your connected accounts, and learns from the outcomes.</p></div><div className="mt-8"><StageIndicator current={stage} /></div></div>
+
+        <div className="mt-7 grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(310px,0.5fr)]">
+          <section className="min-h-[560px] rounded-2xl border border-white/[0.08] bg-[#111720] p-5 shadow-[0_28px_70px_rgba(0,0,0,0.24)] sm:p-7">
+            {stage === 'source' && <div className="flex h-full flex-col"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Start with the original</p><h2 className="mt-2 text-xl font-semibold text-white">Add one source video</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Keep it natural. The system will preserve your point of view while finding the strongest scenes, hooks, and platform treatments to test.</p></div><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-300"><Upload className="h-4 w-4" /></span></div>
+              <label className={`mt-8 flex min-h-[250px] cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed p-8 text-center transition ${fileName ? 'border-cyan-300/40 bg-cyan-300/[0.05]' : 'border-white/[0.14] bg-white/[0.02] hover:border-cyan-300/45 hover:bg-cyan-300/[0.04]'}`}><input type="file" accept="video/*" className="sr-only" onChange={handleFileChange} /><span className={`flex h-14 w-14 items-center justify-center rounded-2xl ${fileName ? 'bg-cyan-300 text-slate-950' : 'bg-white/[0.07] text-cyan-300'}`}>{fileName ? <Check className="h-6 w-6" /> : <FileVideo className="h-6 w-6" />}</span>{fileName ? <><p className="mt-4 text-sm font-semibold text-cyan-100">{fileName}</p><p className="mt-1.5 text-xs text-slate-500">Added to your private source library · Click to replace</p></> : <><p className="mt-4 text-sm font-semibold text-slate-200">Drop a video here, or choose a file</p><p className="mt-1.5 text-xs text-slate-500">MP4, MOV, or WebM · Original footage stays in your workspace</p></>}<span className="mt-5 rounded-lg border border-white/[0.1] bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-300">Choose source video</span></label>
+              {!fileName && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3"><p className="text-xs text-slate-500">Want to see the workflow first?</p><button type="button" onClick={useExampleSource} className="text-xs font-bold text-cyan-300 transition hover:text-cyan-200">Explore with an example source <ArrowRight className="ml-1 inline h-3.5 w-3.5" /></button></div>}
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">{[{ icon: LockKeyhole, title: 'Private by default', copy: 'Only your workspace and system jobs can access source files.' }, { icon: ScanSearch, title: 'Traceable outputs', copy: 'Every adaptation retains a link back to your original.' }, { icon: ShieldCheck, title: 'Creator controlled', copy: 'Nothing publishes until you review the plan.' }].map((item) => <div key={item.title} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5"><item.icon className="h-4 w-4 text-cyan-300" /><p className="mt-3 text-xs font-semibold text-slate-200">{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{item.copy}</p></div>)}</div>
+              <div className="mt-auto flex justify-end border-t border-white/[0.07] pt-6"><Button onClick={analyzeSource} disabled={!fileName || isAnalyzing} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">{isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ScanSearch className="mr-2 h-4 w-4" />}{isAnalyzing ? 'Understanding source…' : 'Understand this source'}<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
+            </div>}
+
+            {stage === 'analysis' && <div className="flex h-full flex-col"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Creative fingerprint</p><h2 className="mt-2 text-xl font-semibold text-white">What this source can carry</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">The system found a clear point of view and several elements worth retaining across adaptations. These are guidance signals, not a promise of performance.</p></div><div className="flex items-center gap-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs font-semibold text-emerald-200"><BadgeCheck className="h-4 w-4" />Analysis complete</div></div>
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">{sourceSignals.map((signal, index) => <div key={signal.label} className="rounded-2xl border border-white/[0.07] bg-gradient-to-br from-white/[0.04] to-transparent p-5"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-600">{signal.label}</span><span className={`h-2 w-2 rounded-full ${index === 2 ? 'bg-amber-300' : 'bg-cyan-300'}`} /></div><p className="mt-4 text-base font-semibold text-slate-100">{signal.value}</p><p className="mt-2 text-xs leading-5 text-slate-500">{signal.detail}</p></div>)}</div>
+              <div className="mt-5 rounded-2xl border border-cyan-300/10 bg-cyan-300/[0.045] p-5"><div className="flex gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-300/10 text-cyan-300"><Lightbulb className="h-4 w-4" /></span><div><p className="text-sm font-semibold text-cyan-100">The system&apos;s working hypothesis</p><p className="mt-1.5 text-sm leading-6 text-slate-400">Your strongest advantage is the tension between a familiar productivity belief and your founder-specific counterpoint. The experiments will vary the opening promise and structure while preserving that proof.</p></div></div></div>
+              <div className="mt-5 rounded-xl border border-white/[0.07] bg-black/10 p-4"><div className="flex items-center justify-between"><p className="text-xs font-semibold text-slate-300">Original source retained</p><span className="text-[10px] text-slate-600">{fileName || 'Source video'}</span></div><div className="mt-3 flex items-center gap-3"><div className="flex h-11 w-16 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-600 to-slate-800"><Play className="h-4 w-4 fill-white text-white" /></div><div className="flex-1"><div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full w-[42%] rounded-full bg-cyan-300" /></div><div className="mt-2 flex justify-between text-[10px] text-slate-600"><span>00:00</span><span>Strongest hook window: 00:04–00:11</span><span>00:58</span></div></div></div></div>
+              <div className="mt-auto flex items-center justify-between border-t border-white/[0.07] pt-6"><button type="button" onClick={() => setStage('source')} className="text-xs font-semibold text-slate-500 hover:text-white">Replace source</button><Button onClick={buildExperiments} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Sparkles className="mr-2 h-4 w-4" />Prepare experiment slate<ArrowRight className="ml-2 h-4 w-4" /></Button></div>
+            </div>}
+
+            {(stage === 'experiments' || stage === 'ready') && <div className="flex h-full flex-col"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">Controlled adaptation plan</p><h2 className="mt-2 text-xl font-semibold text-white">Three experiments, three learning questions</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Each version changes a small number of creative variables. The outcome will update the next recommendations for your own workspace.</p></div><span className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-300">{selectedCount} selected</span></div>
+              <div className="mt-6 space-y-3">{experiments.map((experiment) => <article key={experiment.id} className={`rounded-2xl border p-4 transition sm:p-5 ${experiment.selected ? 'border-cyan-300/25 bg-cyan-300/[0.035]' : 'border-white/[0.07] bg-white/[0.015] opacity-70'}`}><div className="flex gap-3"><button type="button" aria-label={`Toggle ${experiment.platform} experiment`} onClick={() => toggleExperiment(experiment.id)} className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition ${experiment.selected ? 'border-cyan-300 bg-cyan-300 text-slate-950' : 'border-white/[0.16] bg-white/[0.02] text-transparent'}`}><Check className="h-3 w-3" /></button><div className="min-w-0 flex-1"><div className="flex flex-col justify-between gap-3 sm:flex-row"><div className="flex items-center gap-3"><span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${experiment.tone} text-sm font-bold text-white`}>{experiment.mark}</span><div><p className="text-sm font-semibold text-slate-100">{experiment.platform}</p><p className="mt-0.5 text-xs text-slate-500">{experiment.handle} · {experiment.confidence}</p></div></div><span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold text-slate-400"><Clock3 className="h-3 w-3" />{experiment.window}</span></div><div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px]"><div><div className="flex items-start justify-between gap-3"><p className="text-sm font-medium leading-6 text-cyan-50">{experiment.hook}</p><button type="button" onClick={() => copyHook(experiment)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.06] hover:text-cyan-200" aria-label={`Copy ${experiment.platform} hook`}>{copied === experiment.id ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}</button></div><p className="mt-2 text-xs leading-5 text-slate-500">{experiment.rationale}</p></div><div className="grid grid-cols-2 gap-2 text-[10px]"><div className="rounded-lg bg-black/15 p-2.5"><p className="text-slate-600">Structure</p><p className="mt-1 font-semibold leading-4 text-slate-300">{experiment.structure}</p></div><div className="rounded-lg bg-black/15 p-2.5"><p className="text-slate-600">Run time</p><p className="mt-1 font-semibold text-slate-300">{experiment.runtime}</p></div></div></div></div></div></article>)}</div>
+              <div className="mt-auto flex flex-col gap-3 border-t border-white/[0.07] pt-6 sm:flex-row sm:items-center sm:justify-between"><p className="flex items-start gap-2 text-xs leading-5 text-slate-500"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-300" />The system will only prepare selected versions for their recommended windows. You retain final publishing control.</p>{stage === 'ready' ? <span className="inline-flex items-center gap-2 text-xs font-bold text-emerald-200"><CircleCheck className="h-4 w-4" />Plan is ready to publish</span> : <Button onClick={approvePlan} disabled={selectedCount === 0} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Check className="mr-2 h-4 w-4" />Approve plan ({selectedCount})</Button>}</div>
+            </div>}
+          </section>
+
+          <aside className="space-y-5"><div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5 shadow-[0_28px_70px_rgba(0,0,0,0.2)]"><div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Your growth loop</p><h2 className="mt-2 text-base font-semibold text-white">What happens next</h2></div><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-400/10 text-violet-300"><Layers3 className="h-4 w-4" /></span></div><div className="mt-6 space-y-0">{[{ title: 'Extract durable signals', description: 'Find the moments, claims, and proof worth keeping.', icon: ScanSearch }, { title: 'Create controlled adaptations', description: 'Change one creative variable at a time across platforms.', icon: WandSparkles }, { title: 'Observe real performance', description: 'Reconcile retention, engagement, and follower signals.', icon: Eye }, { title: 'Update your next plan', description: 'Your results sharpen the next recommendation.', icon: TimerReset }].map((item, index) => { const active = index <= stageIndex; return <div key={item.title} className="relative flex gap-3 pb-5 last:pb-0"><div className="relative z-10"><span className={`flex h-7 w-7 items-center justify-center rounded-lg ${active ? 'bg-cyan-300 text-slate-950' : 'bg-white/[0.06] text-slate-600'}`}><item.icon className="h-3.5 w-3.5" /></span>{index < 3 && <span className={`absolute left-1/2 top-7 h-5 w-px -translate-x-1/2 ${active ? 'bg-cyan-300/40' : 'bg-white/[0.07]'}`} />}</div><div className="pt-1"><p className={`text-xs font-semibold ${active ? 'text-slate-200' : 'text-slate-600'}`}>{item.title}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{item.description}</p></div></div>; })}</div></div>
+            <div className="rounded-2xl border border-cyan-300/10 bg-gradient-to-br from-cyan-300/[0.08] to-violet-400/[0.04] p-5"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-300/10 text-cyan-200"><Flame className="h-4 w-4" /></div><p className="mt-4 text-sm font-semibold text-cyan-50">Build an advantage, not just volume.</p><p className="mt-2 text-xs leading-5 text-slate-500">This workspace uses the performance of your approved experiments to improve future recommendations. It does not promise virality or control a platform&apos;s feed.</p></div>
+            <div className="rounded-2xl border border-white/[0.08] bg-[#111720] p-5"><div className="flex items-center justify-between"><p className="text-sm font-semibold text-white">Connected destinations</p><Link href="/dashboard" className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200">Manage</Link></div><div className="mt-4 space-y-3">{[{ name: 'TikTok', state: 'Ready', mark: '♪', tone: 'bg-slate-950' }, { name: 'Instagram Reels', state: 'Ready', mark: '◎', tone: 'bg-gradient-to-br from-fuchsia-600 to-orange-400' }, { name: 'YouTube Shorts', state: 'Ready', mark: '▶', tone: 'bg-red-500' }].map((item) => <div key={item.name} className="flex items-center gap-3"><span className={`flex h-8 w-8 items-center justify-center rounded-lg ${item.tone} text-xs font-bold text-white`}>{item.mark}</span><div className="flex-1"><p className="text-xs font-semibold text-slate-300">{item.name}</p><p className="mt-0.5 text-[10px] text-emerald-300">{item.state} to receive approved plan</p></div><ChevronRight className="h-3.5 w-3.5 text-slate-600" /></div>)}</div></div>
+          </aside>
+        </div>
+
+        <div className="mx-auto mt-8 flex max-w-5xl items-center justify-between border-t border-white/[0.07] pt-5 text-[11px] text-slate-600"><span>Source assets remain private to this creator workspace.</span><span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />Every output retains source provenance</span></div>
+      </main>
+    </div>
+  );
+}
