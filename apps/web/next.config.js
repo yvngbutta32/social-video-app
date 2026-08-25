@@ -1,4 +1,8 @@
 /** @type {import('next').NextConfig} */
+const websocketProxyTarget = (process.env.NEXT_PUBLIC_WS_URL || 'http://api-gateway:3001')
+  .replace(/^ws:/, 'http:')
+  .replace(/^wss:/, 'https:');
+
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
@@ -36,7 +40,7 @@ const nextConfig = {
       },
       {
         source: '/ws/:path*',
-        destination: `${process.env.NEXT_PUBLIC_WS_URL || 'ws://api-gateway:3001'}/:path*`,
+        destination: `${websocketProxyTarget}/:path*`,
       },
     ];
   },
