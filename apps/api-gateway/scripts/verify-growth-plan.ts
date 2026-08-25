@@ -164,6 +164,10 @@ async function main() {
   assert.match(publisherWorker, /ALLOW_LEGACY_BROWSER_AUTOMATION/);
 
   const publishingRoute = await readFile(new URL('../src/routes/publishing.ts', import.meta.url), 'utf8');
+  assert.match(publishingRoute, /app\.get\('\/intents'/);
+  assert.match(publishingRoute, /workspaceId: access\.workspaceId/);
+  assert.match(publishingRoute, /query\.status/);
+  assert.match(publishingRoute, /take: query\.limit/);
   assert.match(publishingRoute, /Platform oversight is read-only/);
   assert.match(publishingRoute, /creator_publish_intent_approved/);
   assert.match(publishingRoute, /publishingAttempt\.create/);

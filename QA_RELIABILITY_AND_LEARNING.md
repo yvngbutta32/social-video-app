@@ -109,3 +109,9 @@ The live experiment-plan endpoint now creates or reuses workspace-owned `VideoVa
 The browser uses the durable variant ID for experiment identity and labels pending variants as rendering required rather than approval-ready. The source, variant, destination, approval, scheduling, and delivery boundaries remain separate.
 
 Growth, pilot, and platform contracts, API type-check/build, and web type-check/build passed.
+
+## Creator delivery observability checkpoint
+
+Added a workspace-scoped `GET /publishing/intents` history endpoint with bounded status filtering and recent attempt summaries. Growth Studio now auto-refreshes recent creator-approved intents and displays platform, destination, intent state, and latest attempt state. This makes queued, retrying, failed, and published outcomes visible without giving the developer operational content controls.
+
+The experiment-plan endpoint also persists or reuses workspace-owned variants through a deterministic plan key and keeps approval blocked until the variant is rendered and ready. API contracts, type-check/build, web build, and processor syntax validation passed.

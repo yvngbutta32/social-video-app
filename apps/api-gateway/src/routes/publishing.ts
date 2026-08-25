@@ -15,6 +15,11 @@ const createIntentSchema = z.object({
   idempotencyKey: z.string().min(16).max(180),
 });
 
+const intentListQuerySchema = z.object({
+  status: z.enum(['draft', 'scheduled', 'publishing', 'published', 'failed', 'cancelled']).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
 function requireCreatorWorkflowControl(access: { oversight: boolean; role: string }) {
   if (access.oversight) {
     throw new HTTPException(403, { message: 'Platform oversight is read-only. Creator content approval and scheduling remain creator-controlled.' });
@@ -27,6 +32,32 @@ function requireCreatorWorkflowControl(access: { oversight: boolean; role: strin
 
 export function createPublishingRoutes() {
   const app = new Hono<{ Variables: Variables }>();
+
+  app.get('/intents', zValidator('query', intentListQuerySchema), async (c: any) => {
+    const actor = c.get('user');
+    const query = c.req.valid('query');
+    const access = await requireWorkspaceAccess(actor, actor.workspaceId);
+    const intents = await prisma.scheduledPost.findMany({
+      where: { workspaceId: access.workspaceId, ...(query.status ? { status: query.status } : {}) },
+      orderBy: { updatedAt: 'desc' },
+      take: query.limit,
+      select: {
+        id: true,
+        status: true,
+        scheduledAt: true,
+        postedAt: true,
+        creatorApprovedAt: true,
+        retryCount: true,
+        nextAttemptAt: true,
+        deadLetteredAt: true,
+        errorMessage: true,
+        variant: { select: { id: true, platform: true, videoId: true } },
+        socialAccount: { select: { id: true, platform: true, username: true, displayName: true, isActive: true } },
+        publishingAttempts: { orderBy: { requestedAt: 'desc' }, take: 3, select: { attemptNumber: true, status: true, requestedAt: true, completedAt: true, errorMessage: true } },
+      },
+    });
+    return c.json({ data: intents, safeguards: ['Delivery history is workspace-scoped and read-only for this endpoint.', 'Platform results and organic reach remain external and are not guaranteed.'] });
+  });
 
   app.post('/intents', zValidator('json', createIntentSchema), async (c: any) => {
     const actor = c.get('user');

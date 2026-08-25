@@ -74,6 +74,21 @@ export type GrowthPlan = {
   safeguards: string[];
 };
 
+export type PublishingIntentSummary = {
+  id: string;
+  status: string;
+  scheduledAt: string;
+  postedAt: string | null;
+  creatorApprovedAt: string | null;
+  retryCount: number;
+  nextAttemptAt: string | null;
+  deadLetteredAt: string | null;
+  errorMessage: string | null;
+  variant: { id: string; platform: string; videoId: string };
+  socialAccount: { id: string; platform: string; username: string | null; displayName: string | null; isActive: boolean };
+  publishingAttempts: Array<{ attemptNumber: number; status: string; requestedAt: string; completedAt: string | null; errorMessage: string | null }>;
+};
+
 export type Readiness = {
   sourceVideoId: string;
   state: 'attention_required' | 'ready_for_experiment_plan' | 'ready_for_creator_approval' | 'operating';
