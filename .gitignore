@@ -17,5 +17,6 @@ authelia/
 traefik/  
 *.pid  
 *.lock  
+*.tsbuildinfo  
 .DS_Store  
 Thumbs.db 
