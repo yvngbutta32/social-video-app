@@ -121,3 +121,9 @@ The experiment-plan endpoint also persists or reuses workspace-owned variants th
 The Growth Studio experiment-plan transaction now reuses a matching planned variant by deterministic `planKey` and, when present, reuses the processor-produced ready artifact for the same source and platform. It preserves prior generation metadata while attaching the experiment hypothesis, preventing duplicate platform variants and avoiding a false pending state when a rendered artifact already exists.
 
 The response remains explicit: a connected destination is not enough for approval; the variant must be rendered and ready. Growth, pilot, and platform contracts plus API and web production builds passed after this correction.
+
+## Durable processing progress checkpoint
+
+The processor now persists structured progress under each video’s `metadata.processing` record. It reports initialization, active platform rendering, platform completion, deduplicated-output completion, final readiness, and failure state with phase, percentage, platform count, timestamps, and retryability context. This gives the creator UI a truthful basis for progress and recovery messaging while preserving existing FFmpeg and MinIO behavior.
+
+The progress update is workspace-safe through the video ID already authorized by the queued processing contract. Processor syntax checks, Growth/Pilot/Platform contracts, API type-check/build, and web type-check/build passed.

@@ -199,6 +199,12 @@ async function main() {
   assert.match(processorEntrypoint, /video-processing/);
   const processorImplementation = await readFile(new URL('../../../workers/processor/src/processor.js', import.meta.url), 'utf8');
   assert.match(processorImplementation, /video\.minio_object_key/);
+  assert.match(processorImplementation, /updateVideoProgress/);
+  assert.match(processorImplementation, /platform_complete/);
+  assert.match(processorImplementation, /deduplicated: true/);
+  const processorDb = await readFile(new URL('../../../workers/processor/src/db.js', import.meta.url), 'utf8');
+  assert.match(processorDb, /updateVideoProgress/);
+  assert.match(processorDb, /jsonb_set/);
   const processorStorage = await readFile(new URL('../../../workers/processor/src/minio.js', import.meta.url), 'utf8');
   assert.match(processorStorage, /downloadFile\(key, bucket = BUCKET\)/);
 

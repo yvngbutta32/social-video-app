@@ -3,7 +3,7 @@ import { Readable, PassThrough } from 'stream';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { downloadFile, uploadMultipart, uploadPart, completeMultipart, abortMultipart, fileExists } from './minio.js';
-import { findVideoById, updateVideoStatus, createVideoVariant } from './db.js';
+import { findVideoById, updateVideoStatus, updateVideoProgress, createVideoVariant } from './db.js';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
@@ -573,6 +573,7 @@ export async function processVideoJob(job, deps) {
   const childLogger = logger.child({ jobId: job.id, videoId });
   
   childLogger.info({ platforms, optimization, generateThumbnails, shouldGenerateCaptions, shouldDetectScenes, extractHooks }, 'Starting optimized video processing');
+  await updateVideoProgress(videoId, { state: 'processing', phase: 'initializing', completedPlatforms: 0, totalPlatforms: platforms.length, percent: 0, updatedAt: new Date().toISOString() });
   
   try {
     // Get video metadata from database
@@ -624,8 +625,9 @@ export async function processVideoJob(job, deps) {
     const thumbnails = [];
     
     // Process each platform with optimization
-    for (const platform of platforms) {
+    for (const [platformIndex, platform] of platforms.entries()) {
       const spec = { ...getPlatformSpec(platform), platform };
+      await updateVideoProgress(videoId, { state: 'processing', phase: 'rendering_platform', platform, completedPlatforms: platformIndex, totalPlatforms: platforms.length, percent: Math.round((platformIndex / platforms.length) * 100), updatedAt: new Date().toISOString() });
       
       // Check duration limits
       if (duration > spec.maxDuration) {
@@ -670,6 +672,7 @@ export async function processVideoJob(job, deps) {
           deduplicated: true,
         });
         variants.push({ platform, variantId: variant.id, s3Key: variantS3Key, optimizationMode, deduplicated: true });
+        await updateVideoProgress(videoId, { state: 'processing', phase: 'platform_complete', platform, completedPlatforms: platformIndex + 1, totalPlatforms: platforms.length, percent: Math.round(((platformIndex + 1) / platforms.length) * 100), deduplicated: true, updatedAt: new Date().toISOString() });
         continue;
       }
       
@@ -750,6 +753,7 @@ export async function processVideoJob(job, deps) {
         });
         
         variants.push({ platform, variantId: variant.id, s3Key: variantS3Key, optimizationMode, validation: validation.valid });
+        await updateVideoProgress(videoId, { state: 'processing', phase: 'platform_complete', platform, completedPlatforms: platformIndex + 1, totalPlatforms: platforms.length, percent: Math.round(((platformIndex + 1) / platforms.length) * 100), updatedAt: new Date().toISOString() });
         
         // Cleanup temp files
         await fs.unlink(normalizedPath).catch(() => {});
@@ -762,6 +766,7 @@ export async function processVideoJob(job, deps) {
     }
     
     // Update video status with all metadata
+    await updateVideoProgress(videoId, { state: 'ready', phase: 'complete', completedPlatforms: platforms.length, totalPlatforms: platforms.length, percent: 100, updatedAt: new Date().toISOString() });
     await updateVideoStatus(videoId, 'ready', {
       variants: variants.map(v => ({ platform: v.platform, variantId: v.variantId })),
       thumbnails: thumbnails.map(t => ({ platform: t.platform, s3Key: t.s3Key })),
@@ -786,6 +791,7 @@ export async function processVideoJob(job, deps) {
     
   } catch (error) {
     childLogger.error({ err: error }, 'Video processing failed');
+    await updateVideoProgress(videoId, { state: 'failed', phase: 'error', error: error.message, retryable: true, updatedAt: new Date().toISOString() });
     await updateVideoStatus(videoId, 'failed', { error: error.message, failedAt: new Date().toISOString() });
     throw error;
   }

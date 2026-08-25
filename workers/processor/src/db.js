@@ -106,6 +106,19 @@ export async function updateVideoStatus(videoId, status, metadata = {}) {
   return result.rows[0];
 }
 
+export async function updateVideoProgress(videoId, processing) {
+  const result = await query(
+    `UPDATE videos
+     SET status = CASE WHEN $2::jsonb->>'state' = 'failed' THEN 'failed' ELSE 'processing' END,
+         metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{processing}', $2::jsonb),
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [videoId, JSON.stringify(processing)]
+  );
+  return result.rows[0];
+}
+
 export async function createVideoVariant(videoId, platform, s3Key, metadata) {
   const result = await query(
     `INSERT INTO video_variants (video_id, platform, minio_object_key, aspect_ratio, caption, hashtags, status, generation_params)
