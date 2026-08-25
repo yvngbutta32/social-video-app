@@ -143,6 +143,8 @@ async function main() {
   assert.match(growthRoute, /variant_rendering_required/);
   assert.match(growthRoute, /variantId/);
   assert.match(growthRoute, /generationParams/);
+  assert.match(growthRoute, /existingRendered/);
+  assert.match(growthRoute, /processor_variant_ready/);
   assert.match(growthRoute, /learning-signal/);
   assert.match(growthRoute, /evaluateLearningSignal/);
   assert.match(growthRoute, /readiness/);

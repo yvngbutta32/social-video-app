@@ -159,10 +159,13 @@ export function createGrowthRoutes() {
     });
     const persistedVariants = await prisma.$transaction(async (tx) => Promise.all(experiments.map(async (experiment) => {
       const planKey = `${video.id}:${experiment.platform}:${input.objective}`;
-      const candidates = await tx.videoVariant.findMany({ where: { videoId: video.id, platform: experiment.platform, variantType: experiment.variantType }, select: { id: true, generationParams: true, status: true } });
-      const existing = candidates.find((candidate) => (candidate.generationParams as { planKey?: string } | null)?.planKey === planKey);
+      const candidates = await tx.videoVariant.findMany({ where: { videoId: video.id, platform: experiment.platform }, orderBy: { createdAt: 'desc' }, select: { id: true, generationParams: true, status: true, minioObjectKey: true } });
+      const existingPlanned = candidates.find((candidate) => (candidate.generationParams as { planKey?: string } | null)?.planKey === planKey);
+      const existingRendered = candidates.find((candidate) => candidate.status === 'ready' && candidate.minioObjectKey);
+      const existing = existingPlanned || existingRendered;
       if (existing) {
-        return tx.videoVariant.update({ where: { id: existing.id }, data: { hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
+        const priorParams = (existing.generationParams as Record<string, unknown> | null) ?? {};
+        return tx.videoVariant.update({ where: { id: existing.id }, data: { variantType: experiment.variantType, hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { ...priorParams, planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: existing.status === 'ready' ? 'processor_variant_ready' : 'processor_variant_render_required' } }, select: { id: true, status: true } });
       }
       return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
     })));

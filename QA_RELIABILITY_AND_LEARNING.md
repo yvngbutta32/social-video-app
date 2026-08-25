@@ -115,3 +115,9 @@ Growth, pilot, and platform contracts, API type-check/build, and web type-check/
 Added a workspace-scoped `GET /publishing/intents` history endpoint with bounded status filtering and recent attempt summaries. Growth Studio now auto-refreshes recent creator-approved intents and displays platform, destination, intent state, and latest attempt state. This makes queued, retrying, failed, and published outcomes visible without giving the developer operational content controls.
 
 The experiment-plan endpoint also persists or reuses workspace-owned variants through a deterministic plan key and keeps approval blocked until the variant is rendered and ready. API contracts, type-check/build, web build, and processor syntax validation passed.
+
+## Variant identity and artifact-reuse checkpoint
+
+The Growth Studio experiment-plan transaction now reuses a matching planned variant by deterministic `planKey` and, when present, reuses the processor-produced ready artifact for the same source and platform. It preserves prior generation metadata while attaching the experiment hypothesis, preventing duplicate platform variants and avoiding a false pending state when a rendered artifact already exists.
+
+The response remains explicit: a connected destination is not enough for approval; the variant must be rendered and ready. Growth, pilot, and platform contracts plus API and web production builds passed after this correction.
