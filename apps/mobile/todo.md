@@ -24,3 +24,5 @@
 - [x] Remove unused template backend and managed-auth runtime wiring from the native companion package.
 - [x] Remove managed-project metadata and credentials from the source package before GitHub preservation.
 - [x] Remove the residual template environment loader from the native configuration path.
+- [x] Map verified adaptation-candidate and recipe API responses into the native review experience.
+- [x] Add private artifact preview handling only for deployment-reachable signed URLs.

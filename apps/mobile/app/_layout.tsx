@@ -21,6 +21,7 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="sign-in" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="processing-detail" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+              <Stack.Screen name="artifact-preview" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="review" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="edit-lab" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
             </Stack>

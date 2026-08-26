@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 
+import { parseAdaptationDetail, parseAdaptationPlan, parsePrivateArtifactPreview } from "@/lib/adaptation-contract";
 import { parseNativeAuthData, selectWorkspaceId } from "@/lib/mobile-auth-contract";
 import { parseSourceAnalytics } from "@/lib/analytics-contract";
 import { parseProcessingDiagnostic } from "@/lib/processing-contract";
@@ -78,6 +79,28 @@ export async function getSourceAnalytics(videoId: string) {
   const response = await viralBoostRequest(`/api/v1/videos/${videoId}/analytics`);
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseSourceAnalytics(await response.json());
+}
+
+export async function prepareAdaptationPlan(videoId: string) {
+  const response = await viralBoostRequest("/api/v1/growth/experiment-plan", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoId, platforms: ["tiktok", "instagram", "youtube", "linkedin"], objective: "retention" }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseAdaptationPlan(await response.json());
+}
+
+export async function getAdaptationDetail(variantId: string) {
+  const response = await viralBoostRequest(`/api/v1/growth/adaptations/${variantId}`);
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseAdaptationDetail(await response.json());
+}
+
+export async function getPrivateArtifactPreview(variantId: string) {
+  const response = await viralBoostRequest(`/api/v1/growth/adaptations/${variantId}/preview?kind=video`);
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parsePrivateArtifactPreview(await response.json());
 }
 
 export async function viralBoostRequest(path: string, init: RequestInit = {}) {
