@@ -94,6 +94,8 @@ export type AdaptationRecord = {
   recipe: AdaptationRecipe;
   artifact: { objectKey: string; thumbnailObjectKey: string | null; completedAt: string | null; state: 'current_recipe_rendered' | 'previous_recipe_artifact_available' } | null;
   renderState: string;
+  quality: { durationSeconds?: number; dimensions?: string; sizeMB?: number; validationIssues?: string[] } | null;
+  appliedRecipe: { focalCompositionApplied?: boolean; safeZoneGuideRequested?: boolean; safeZoneGuideRendered?: boolean; headlineOverlay?: boolean; timedCaptionsRendered?: boolean; audioNormalized?: boolean } | null;
   errorMessage: string | null;
   safeguards: string[];
 };

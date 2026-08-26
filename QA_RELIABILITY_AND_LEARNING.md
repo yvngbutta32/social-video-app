@@ -185,3 +185,14 @@ Private preview signing intentionally requires `MINIO_PUBLIC_ENDPOINT` in additi
 Growth Studio now shows a private review panel inside the advanced edit workflow. When the current recipe has an artifact, it displays a browser-native video player, explains whether the artifact matches the active recipe or is retained from a prior recipe while a new revision renders, and shows the temporary-link expiry. When no artifact is ready, the interface explains the queued-render boundary rather than presenting an empty player as a completed result.
 
 `npm run test:artifact-preview` verifies that signing uses a browser-reachable endpoint, creates a five-minute URL, avoids exposing the secret value, and rejects preview issuance when the public endpoint is absent. API type-check/build, web lint/type-check/Vitest/production build, adaptation and Growth Studio contracts, and repository diff hygiene passed. Browser playback and S3-compatible signature validation remain deployment-gated until a persistent public endpoint, MinIO, worker, and real artifact exist.
+
+
+## Renderer fidelity and artifact-quality checkpoint
+
+The FFmpeg filter builder is now isolated in `workers/processor/src/render-filter.js` and covered by `npm run test:render-filter`. The test verifies that a horizontal focal point is embedded in wide-input smart-crop expressions, a vertical focal point is embedded in tall-input smart-fill expressions, safe-zone guide boxes are absent from delivery filters by default, editor/debug guides can be requested explicitly, and headline overlay text escapes characters that would otherwise corrupt FFmpeg `drawtext` expressions.
+
+The creator recipe renderer now uses focal composition when `smart_crop` or `smart_fill` is selected. Growth Studio exposes horizontal and vertical focal sliders, saves those normalized coordinates as part of the non-destructive composition recipe, and queues a fresh private render. Creator review displays renderer-persisted dimensions, duration, file size, and whether focal composition was applied. These values come from the worker validation result; they are not client estimates.
+
+Safe-zone guides are now treated as editor metadata. They can be requested in the edit specification, but source-processing and recipe-render delivery artifacts pass `safeZone: false`; white guide boxes are not burned into exported creator media. Renderer state records the requested guide and the fact that it was not rendered into the deliverable.
+
+This checkpoint passed API adaptation/Growth contracts, API type-check/build, web lint/type-check/Vitest/production build, web and API production dependency audits with zero vulnerabilities, intelligence checks, processor syntax checks, `test:render-filter`, and repository diff hygiene. Actual FFmpeg rendering with a real uploaded source remains deployment-gated and is not represented as runtime-tested in this record.

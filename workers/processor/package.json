@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "vitest run",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test:render-filter": "node scripts/verify-render-filter.js"
   },
   "dependencies": {
     "bullmq": "^5.8.0",

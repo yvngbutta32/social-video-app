@@ -12,6 +12,7 @@ import { createHash } from 'crypto';
 import axios from 'axios';
 import { query } from './db.js';
 import { spawn } from 'child_process';
+import { buildFilterComplex } from './render-filter.js';
 
 // Platform-specific optimization specifications (Enhanced)
 const PLATFORM_SPECS = {
@@ -362,52 +363,6 @@ async function createViralOptimized(inputPath, spec, options = {}) {
   });
 }
 
-function buildFilterComplex(spec, inputWidth, inputHeight, options = {}) {
-  const { 
-    mode = 'fit',
-    safeZone = true,
-    addCaptions = false,
-    captionText = '',
-    focusPoint = { x: 0.5, y: 0.5 },
-  } = options;
-
-  const { width, height, safeZones } = spec;
-  const aspectRatio = inputWidth / inputHeight;
-  const targetAspect = width / height;
-
-  let videoFilter = '';
-
-  if (mode === 'crop') {
-    if (aspectRatio > targetAspect) {
-      videoFilter = `[0:v]crop=ih*${targetAspect}:ih,scale=${width}:${height}`;
-    } else {
-      videoFilter = `[0:v]crop=iw:iw/${targetAspect},scale=${width}:${height}`;
-    }
-  } else if (mode === 'blur_bg') {
-    videoFilter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},gblur=sigma=20[bg];[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
-  } else if (mode === 'smart_crop' || mode === 'smart_fill') {
-    // Smart crop based on focus point
-    const cropX = Math.floor(focusPoint.x * inputWidth);
-    const cropY = Math.floor(focusPoint.y * inputHeight);
-    videoFilter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
-  } else {
-    videoFilter = `[0:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`;
-  }
-
-  // Add safe zone guides (for debugging/preview)
-  if (safeZone && safeZones) {
-    const { top, bottom, left, right } = safeZones;
-    videoFilter += `,drawbox=x=${left}:y=${top}:w=${width-left-right}:h=${height-top-bottom}:color=white@0.3:t=2`;
-  }
-
-  // Add captions area placeholder
-  if (addCaptions && captionText) {
-    videoFilter += `,drawtext=text='${captionText.replace(/'/g, "\\'")}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-th-100`;
-  }
-
-  return videoFilter;
-}
-
 async function probeVideo(inputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(inputPath, (err, metadata) => {
@@ -715,13 +670,22 @@ export async function processVariantRenderJob(job, deps) {
         renderedAt: new Date().toISOString(),
         renderRecipeRevision: revision,
         renderValidation: validation,
-        appliedRecipe: {
-          sourceRange: recipe.sourceRange,
-          composition: recipe.composition,
-          headlineOverlay: Boolean(recipe.headline),
-          timedCaptionsRendered: false,
-          audioNormalized: Boolean(recipe.audio.normalize),
-        },
+          appliedRecipe: {
+            sourceRange: recipe.sourceRange,
+            composition: recipe.composition,
+            focalCompositionApplied: ['smart_crop', 'smart_fill'].includes(recipe.composition.mode),
+            safeZoneGuideRequested: Boolean(recipe.composition.showSafeZones),
+            safeZoneGuideRendered: false,
+            headlineOverlay: Boolean(recipe.headline),
+            timedCaptionsRendered: false,
+            audioNormalized: Boolean(recipe.audio.normalize),
+          },
+          artifactQuality: {
+            durationSeconds: validation.metadata.duration,
+            dimensions: `${validation.metadata.width}x${validation.metadata.height}`,
+            sizeMB: Number(validation.metadata.sizeMB?.toFixed?.(2) ?? validation.metadata.sizeMB),
+            validationIssues: validation.issues,
+          },
       },
     });
     childLogger.info({ objectKey, thumbnailKey, revision }, 'Creator adaptation recipe rendered');
@@ -864,10 +828,10 @@ export async function processVideoJob(job, deps) {
         if (optimizationMode === 'viral_optimize') {
           outputPath = await createViralOptimized(tempInputPath, spec, {
             mode: 'smart_crop',
-            safeZone: true,
+            safeZone: false,
           });
         } else {
-          outputPath = await createOptimizedVariant(tempInputPath, spec, { mode: optimizationMode, safeZone: true });
+          outputPath = await createOptimizedVariant(tempInputPath, spec, { mode: optimizationMode, safeZone: false });
         }
         
         // Normalize audio

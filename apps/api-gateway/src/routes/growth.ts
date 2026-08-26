@@ -260,6 +260,8 @@ export function createGrowthRoutes() {
           }
           : null,
         renderState: params.renderingBoundary ?? 'processor_variant_render_required',
+        quality: params.artifactQuality ?? null,
+        appliedRecipe: params.appliedRecipe ?? null,
         errorMessage: variant.errorMessage,
         safeguards: [
           'The original source remains unchanged; edits are stored as a non-destructive recipe.',
