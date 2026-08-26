@@ -25,6 +25,7 @@
     "test:multipart-upload": "tsx scripts/verify-multipart-upload-contract.ts",
     "test:source-list-workspace": "tsx scripts/verify-source-list-workspace.ts",
     "test:json-safe": "tsx scripts/verify-json-safe.ts"
+    ,"test:operational-guards": "tsx scripts/verify-operational-guards.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

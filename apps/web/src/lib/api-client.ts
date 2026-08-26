@@ -8,16 +8,19 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, accessToken?: string, init?: RequestInit, workspaceId?: string): Promise<T> {
+export function createApiHeaders(init: RequestInit | undefined, accessToken?: string, workspaceId?: string) {
   const headers = new Headers(init?.headers);
   headers.set('Accept', 'application/json');
   if (init?.body && !(typeof FormData !== 'undefined' && init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  if (accessToken) {
-    headers.set('Authorization', `Bearer ${accessToken}`);
-  }
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   if (workspaceId) headers.set('x-workspace-id', workspaceId);
+  return headers;
+}
+
+export async function apiRequest<T>(path: string, accessToken?: string, init?: RequestInit, workspaceId?: string): Promise<T> {
+  const headers = createApiHeaders(init, accessToken, workspaceId);
 
   const response = await fetch(`/api/v1${path}`, {
     ...init,

@@ -1,0 +1,84 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API contracts and quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api-gateway/package-lock.json
+      - run: npm ci
+      - run: |
+          npm run test:pilot
+          npm run test:platform
+          npm run test:growth
+          npm run test:auth-boundary
+          npm run test:native-auth
+          npm run test:truthful-boundaries
+          npm run test:analytics-integrity
+          npm run test:adaptations
+          npm run test:artifact-preview
+          npm run test:clip-candidates
+          npm run test:processing-diagnostics
+          npm run test:intelligence-boundary
+          npm run test:webhook-security
+          npm run test:cors-workspace-header
+          npm run test:multipart-upload
+          npm run test:source-list-workspace
+          npm run test:json-safe
+          npm run test:operational-guards
+      - run: npm run lint && npm run typecheck && npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  web:
+    name: Web quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run test && npm run lint && npm run type-check && npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  mobile:
+    name: Native companion quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/mobile/pnpm-lock.yaml
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test && pnpm lint && pnpm check && npx expo-doctor
+      - run: pnpm audit --prod --audit-level=critical

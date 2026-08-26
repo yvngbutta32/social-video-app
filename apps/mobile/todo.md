@@ -58,3 +58,11 @@
 - [x] Update the web source client to send the selected workspace header on all authenticated source requests.
 - [x] Persist and expose an explicit authorized workspace selection in the self-owned browser session.
 - [ ] Validate cross-device workspace source synchronization with an invited multi-workspace test account before release.
+- [x] Produce an evidence-based full-scope assessment and dimension-by-dimension product rating.
+- [x] Align the growth-plan verifier with the explicit creator-workspace upload contract before final assessment validation.
+- [x] Audit and implement dependency-aware API readiness with safe degraded-state reporting.
+- [x] Add API-level request-size and abuse-protection controls with deterministic regression coverage.
+- [x] Add reproducible CI quality gates for API, web, and native source validation.
+- [x] Ensure verified public provider webhooks bypass bearer middleware while retaining signature verification and abuse protections.
+- [x] Add web regression tests for explicit workspace selection and authenticated workspace headers.
+- [x] Add Redis-backed distributed request limiting with bounded local fallback for unavailable cache infrastructure.

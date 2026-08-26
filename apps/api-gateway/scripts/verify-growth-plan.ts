@@ -212,7 +212,8 @@ async function main() {
 
   const videoRoute = await readFile(new URL('../src/routes/videos.ts', import.meta.url), 'utf8');
   assert.match(videoRoute, /app\.post\('\/upload'/);
-  assert.match(videoRoute, /No creator workspace access/);
+  assert.match(videoRoute, /creatorWorkspaceForRequest\(c, user\)/);
+  assert.match(videoRoute, /x-workspace-id/);
   assert.match(videoRoute, /Only MP4, MOV, WebM, and M4V/);
   assert.match(videoRoute, /processing_queued/);
   assert.match(videoRoute, /uploadSource/);
