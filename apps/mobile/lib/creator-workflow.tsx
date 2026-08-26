@@ -42,6 +42,7 @@ type CreatorWorkflowContextValue = {
   updateSource: (sourceId: string, update: Partial<Pick<MobileSource, "status" | "serverVideoId" | "uploadError" | "multipartUpload">>) => void;
   recipeFor: (sourceId: string) => MobileEditRecipe;
   saveRecipe: (recipe: Omit<MobileEditRecipe, "revision">) => void;
+  replaceRecipe: (recipe: MobileEditRecipe) => void;
 };
 
 const CreatorWorkflowContext = createContext<CreatorWorkflowContextValue | null>(null);
@@ -101,6 +102,10 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     });
   }, []);
 
+  const replaceRecipe = useCallback((recipe: MobileEditRecipe) => {
+    setRecipes((current) => ({ ...current, [recipe.sourceId]: recipe }));
+  }, []);
+
   const value = useMemo(() => ({
     sources,
     selectedSourceId,
@@ -109,7 +114,8 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     updateSource,
     recipeFor,
     saveRecipe,
-  }), [addLocalSource, recipeFor, saveRecipe, selectedSourceId, sources, updateSource]);
+    replaceRecipe,
+  }), [addLocalSource, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, sources, updateSource]);
 
   return <CreatorWorkflowContext.Provider value={value}>{children}</CreatorWorkflowContext.Provider>;
 }

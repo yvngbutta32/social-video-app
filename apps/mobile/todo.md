@@ -43,3 +43,6 @@
 - [x] Verify the self-owned API’s existing upload contract and define a creator-safe resumability boundary.
 - [x] Implement resumable private-source upload preparation and safe recovery status only where the server contract supports it.
 - [ ] Validate resumable uploads against device-reachable private object storage and a disposable creator workspace before release.
+- [x] Verify the self-owned adaptation-recipe mutation contract and revision semantics.
+- [x] Synchronize Edit Lab recipe revisions to verified creator-authorized adaptations while retaining local drafts on unavailable deployments.
+- [ ] Validate server-backed recipe save and renderer dispatch against a deployed creator workspace before release.

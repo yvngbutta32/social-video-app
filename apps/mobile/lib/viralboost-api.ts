@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 
-import { parseAdaptationDetail, parseAdaptationPlan, parsePrivateArtifactPreview } from "@/lib/adaptation-contract";
+import { parseAdaptationDetail, parseAdaptationPlan, parseAdaptationSave, parsePrivateArtifactPreview } from "@/lib/adaptation-contract";
 import { parseNativeAuthData, selectWorkspaceId } from "@/lib/mobile-auth-contract";
 import { parseSourceAnalytics } from "@/lib/analytics-contract";
 import { parseProcessingDiagnostic } from "@/lib/processing-contract";
@@ -95,6 +95,16 @@ export async function getAdaptationDetail(variantId: string) {
   const response = await viralBoostRequest(`/api/v1/growth/adaptations/${variantId}`);
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseAdaptationDetail(await response.json());
+}
+
+export async function saveAdaptationEdit(variantId: string, edit: Record<string, unknown>) {
+  const response = await viralBoostRequest(`/api/v1/growth/adaptations/${variantId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(edit),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseAdaptationSave(await response.json());
 }
 
 export async function getPrivateArtifactPreview(variantId: string) {

@@ -17,6 +17,15 @@ export type AdaptationPlan = {
   safeguards: string[];
 };
 
+export type ServerAdaptationRecipe = {
+  sourceRange: { startSeconds: number; endSeconds: number };
+  composition: { mode: "fit" | "crop" | "blur_bg" | "smart_crop" | "smart_fill"; focalPoint: { x: number; y: number } | null };
+  captions: { enabled: boolean; style: "off" | "clean" | "high_contrast" };
+  headline: string | null;
+  audio: { normalize: boolean };
+  provenance: { revision: number };
+};
+
 export type AdaptationDetail = {
   variantId: string;
   platform: string;
@@ -24,15 +33,13 @@ export type AdaptationDetail = {
   artifact: { state: "current_recipe_rendered" | "previous_recipe_artifact_available"; completedAt: string | null } | null;
   renderState: string;
   errorMessage: string | null;
+  recipe: ServerAdaptationRecipe | null;
   safeguards: string[];
 };
 
-export type PrivateArtifactPreview = {
-  kind: "video" | "thumbnail";
-  url: string;
-  expiresAt: string;
-  safeguards: string[];
-};
+export type AdaptationSave = { variantId: string; status: string; recipe: ServerAdaptationRecipe; renderState: string; nextStep: string };
+
+export type PrivateArtifactPreview = { kind: "video" | "thumbnail"; url: string; expiresAt: string; safeguards: string[] };
 
 function object(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -44,6 +51,34 @@ function string(value: unknown) {
 
 function strings(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function number(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function recipe(value: unknown): ServerAdaptationRecipe | null {
+  const input = object(value);
+  const sourceRange = object(input?.sourceRange);
+  const composition = object(input?.composition);
+  const focalPoint = object(composition?.focalPoint);
+  const captions = object(input?.captions);
+  const audio = object(input?.audio);
+  const provenance = object(input?.provenance);
+  const startSeconds = number(sourceRange?.startSeconds);
+  const endSeconds = number(sourceRange?.endSeconds);
+  const mode = string(composition?.mode);
+  const enabled = captions?.enabled;
+  const style = string(captions?.style);
+  const normalize = audio?.normalize;
+  const revision = number(provenance?.revision);
+  if (startSeconds === null || endSeconds === null || endSeconds <= startSeconds || !mode || !["fit", "crop", "blur_bg", "smart_crop", "smart_fill"].includes(mode) || typeof enabled !== "boolean" || (style !== "off" && style !== "clean" && style !== "high_contrast") || typeof normalize !== "boolean" || revision === null || !Number.isInteger(revision) || revision < 1) return null;
+  const x = number(focalPoint?.x);
+  const y = number(focalPoint?.y);
+  if ((x === null) !== (y === null) || (x !== null && (x < 0 || x > 1 || y === null || y < 0 || y > 1))) return null;
+  const headline = input?.headline === null ? null : string(input?.headline);
+  if (input?.headline !== null && input?.headline !== undefined && headline === null) return null;
+  return { sourceRange: { startSeconds, endSeconds }, composition: { mode: mode as ServerAdaptationRecipe["composition"]["mode"], focalPoint: x === null ? null : { x, y: y as number } }, captions: { enabled, style }, headline, audio: { normalize }, provenance: { revision } };
 }
 
 export function parseAdaptationPlan(payload: unknown): AdaptationPlan {
@@ -76,10 +111,19 @@ export function parseAdaptationDetail(payload: unknown): AdaptationDetail {
   if (!variantId || !platform || !status || !renderState) throw new Error("The adaptation status was incomplete. Refresh it before reviewing an artifact.");
   const artifactData = object(data?.artifact);
   const artifactState = string(artifactData?.state);
-  const artifact = artifactData && (artifactState === "current_recipe_rendered" || artifactState === "previous_recipe_artifact_available")
-    ? { state: artifactState as "current_recipe_rendered" | "previous_recipe_artifact_available", completedAt: string(artifactData.completedAt) }
-    : null;
-  return { variantId, platform, status, artifact, renderState, errorMessage: string(data?.errorMessage), safeguards: strings(data?.safeguards) };
+  const artifact = artifactData && (artifactState === "current_recipe_rendered" || artifactState === "previous_recipe_artifact_available") ? { state: artifactState as "current_recipe_rendered" | "previous_recipe_artifact_available", completedAt: string(artifactData.completedAt) } : null;
+  return { variantId, platform, status, artifact, renderState, errorMessage: string(data?.errorMessage), recipe: recipe(data?.recipe), safeguards: strings(data?.safeguards) };
+}
+
+export function parseAdaptationSave(payload: unknown): AdaptationSave {
+  const data = object(object(payload)?.data);
+  const variantId = string(data?.variantId);
+  const status = string(data?.status);
+  const renderState = string(data?.renderState);
+  const nextStep = string(data?.nextStep);
+  const parsedRecipe = recipe(data?.recipe);
+  if (!variantId || !status || !renderState || !nextStep || !parsedRecipe) throw new Error("The saved edit response was incomplete. Your local draft remains available.");
+  return { variantId, status, recipe: parsedRecipe, renderState, nextStep };
 }
 
 export function parsePrivateArtifactPreview(payload: unknown): PrivateArtifactPreview {
