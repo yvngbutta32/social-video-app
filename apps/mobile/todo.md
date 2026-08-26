@@ -103,3 +103,5 @@
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
 - [x] Align the legacy growth-plan verifier with explicit selected-workspace authorization.
 - [x] Test migration of cached creator state that predates platform target preferences.
+- [x] Publish an evidence-based current-state product scorecard with explicit release-gate caveats.
+- [x] Project verified official-account capability states into native creator platform target selection.

@@ -7,9 +7,10 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { type AdaptationPlan } from "@/lib/adaptation-contract";
+import { type PlatformTargetConnectionState } from "@/lib/platform-target-capabilities";
 import { creatorTargetPlatforms, type CreatorTargetPlatform, useCreatorWorkflow } from "@/lib/creator-workflow";
 import { formatDuration } from "@/lib/media-format";
-import { prepareAdaptationPlan } from "@/lib/viralboost-api";
+import { getPlatformTargetConnectionStates, isViralBoostApiConfigured, prepareAdaptationPlan } from "@/lib/viralboost-api";
 
 type ReviewDraft = { key: string; platform: string; format: string; focus: string; status: string; variantId?: string; caption?: string };
 
@@ -24,6 +25,10 @@ function formatPlatform(platform: string) {
   return ({ tiktok: "TikTok", instagram: "Instagram Reels", youtube: "YouTube Shorts", linkedin: "LinkedIn" } as Record<string, string>)[platform] ?? platform;
 }
 
+function statusTone(state: PlatformTargetConnectionState["state"]) {
+  return state === "connected" ? "#A7F3D0" : state === "official_connector_unavailable" ? "#FBD38D" : state === "connection_required" ? "#B9E6FF" : "#B4D2E3";
+}
+
 export default function ReviewScreen() {
   const colors = useColors();
   const { selectedSourceId, sources, recipeFor, platformsFor, setPlatformTargets } = useCreatorWorkflow();
@@ -32,6 +37,9 @@ export default function ReviewScreen() {
   const [plan, setPlan] = useState<AdaptationPlan | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [targetConnectionStates, setTargetConnectionStates] = useState<PlatformTargetConnectionState[] | null>(null);
+  const [loadingTargetConnections, setLoadingTargetConnections] = useState(false);
+  const [targetConnectionNotice, setTargetConnectionNotice] = useState<string | null>(null);
 
   const refreshPlan = useCallback(async () => {
     if (!source?.serverVideoId || source.status !== "ready" || !selectedPlatforms.length) return;
@@ -44,7 +52,28 @@ export default function ReviewScreen() {
 
   useEffect(() => { void refreshPlan(); }, [refreshPlan]);
 
+  const refreshTargetConnections = useCallback(async () => {
+    if (!isViralBoostApiConfigured()) {
+      setTargetConnectionStates(null);
+      setTargetConnectionNotice("Connection status appears after this app is connected to an invited private workspace.");
+      return;
+    }
+    setLoadingTargetConnections(true);
+    setTargetConnectionNotice(null);
+    try {
+      setTargetConnectionStates(await getPlatformTargetConnectionStates());
+    } catch {
+      setTargetConnectionStates(null);
+      setTargetConnectionNotice("Verified account status is temporarily unavailable. You can still prepare editable drafts; no publishing action is enabled here.");
+    } finally {
+      setLoadingTargetConnections(false);
+    }
+  }, []);
+
+  useEffect(() => { void refreshTargetConnections(); }, [refreshTargetConnections]);
+
   const drafts = useMemo<ReviewDraft[]>(() => plan?.experiments.map((experiment) => ({ key: experiment.variantId, variantId: experiment.variantId, platform: formatPlatform(experiment.platform), format: experiment.aspectRatio, focus: experiment.hook, caption: experiment.caption, status: experiment.availability.replaceAll("_", " ") })) ?? localBlueprints.filter((draft) => selectedPlatforms.includes(draft.key as CreatorTargetPlatform)), [plan, selectedPlatforms]);
+  const selectedTargetStates = useMemo(() => selectedPlatforms.map((platform) => targetConnectionStates?.find((item) => item.platform === platform) ?? null), [selectedPlatforms, targetConnectionStates]);
 
   if (!source) {
     return <ScreenContainer className="p-6" edges={["top", "bottom", "left", "right"]}><Text style={[styles.empty, { color: colors.foreground }]}>Choose a source before reviewing adaptations.</Text><Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, { borderColor: colors.border }, pressed && styles.pressed]}><Text style={{ color: colors.foreground, fontWeight: "800" }}>Back to Library</Text></Pressable></ScreenContainer>;
@@ -71,6 +100,10 @@ export default function ReviewScreen() {
             <Text style={styles.sourceCardTitle}>{plan ? "Your server-verified adaptation plan" : selectedPlatforms.length ? "Your platform draft blueprint" : "Choose where to adapt this source"}</Text>
             <Text style={styles.sourceCardCopy}>{plan ? plan.nextStep : selectedPlatforms.length ? `The current local recipe uses ${formatDuration(draftLength * 1000)} from ${recipe.trimStartSeconds}s to ${recipe.trimEndSeconds}s with ${recipe.composition.replace("_", " ")} composition. Private processing is required before an adaptation plan or artifact exists.` : "Select only the platforms you want to prepare for. This creates editable content drafts; it does not connect accounts, publish, or guarantee reach."}</Text>
             <View style={styles.targetRow}>{creatorTargetPlatforms.map((platform) => <Pressable key={platform} onPress={() => togglePlatform(platform)} style={({ pressed }) => [styles.targetChip, { borderColor: selectedPlatforms.includes(platform) ? "#55E6FF" : "#6E9AB3", backgroundColor: selectedPlatforms.includes(platform) ? "#55E6FF24" : "#0D2D43" }, pressed && styles.pressed]}><Text style={styles.targetChipText}>{formatPlatform(platform)}</Text></Pressable>)}</View>
+            {selectedPlatforms.length ? <View style={styles.connectionPanel}>
+              <View style={styles.connectionPanelHeader}><Text style={styles.connectionEyebrow}>AUTHORIZED CONNECTION STATUS</Text><Pressable onPress={() => void refreshTargetConnections()} disabled={loadingTargetConnections} style={({ pressed }) => [styles.connectionRefresh, (pressed || loadingTargetConnections) && styles.pressed]}><Text style={styles.connectionRefreshText}>{loadingTargetConnections ? "Checking…" : "Refresh"}</Text></Pressable></View>
+              {targetConnectionNotice ? <Text style={styles.connectionUnavailable}>{targetConnectionNotice}</Text> : selectedTargetStates.map((state, index) => <View key={selectedPlatforms[index]} style={styles.connectionRow}><Text style={styles.connectionPlatform}>{formatPlatform(selectedPlatforms[index])}</Text>{state ? <View style={styles.connectionCopy}><Text style={[styles.connectionLabel, { color: statusTone(state.state) }]}>{state.label}{state.accountName ? ` · ${state.accountName}` : ""}</Text><Text style={styles.connectionDetail}>{state.detail}</Text></View> : <Text style={styles.connectionUnavailable}>Checking verified status…</Text>}</View>)}
+            </View> : null}
             {sourceReadyForPlan && selectedPlatforms.length ? <Pressable onPress={() => void refreshPlan()} disabled={loadingPlan} style={({ pressed }) => [styles.planButton, { backgroundColor: "#55E6FF" }, (pressed || loadingPlan) && styles.pressed]}>{loadingPlan ? <ActivityIndicator color="#123B57" /> : <><IconSymbol name="arrow.triangle.2.circlepath" size={18} color="#123B57" /><Text style={styles.planButtonText}>Refresh verified plan</Text></>}</Pressable> : null}
           </CreatorCard>
           {notice ? <Text style={[styles.notice, { color: colors.warning }]}>{notice}</Text> : null}
@@ -90,4 +123,4 @@ export default function ReviewScreen() {
   );
 }
 
-const styles = StyleSheet.create({ content: { gap: 14, paddingTop: 16, paddingBottom: 20 }, header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 2 }, iconButton: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, headerCopy: { flex: 1, gap: 2 }, sourceName: { fontSize: 17, fontWeight: "800" }, sourceCard: { gap: 12, padding: 19 }, sourceCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sourceCardTitle: { color: "#F1FAFF", fontSize: 22, fontWeight: "800" }, sourceCardCopy: { color: "#B4D2E3", fontSize: 14, lineHeight: 21 }, targetRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, targetChip: { minHeight: 36, borderRadius: 12, borderWidth: 1, paddingHorizontal: 11, justifyContent: "center" }, targetChipText: { color: "#F1FAFF", fontSize: 12, fontWeight: "800" }, planButton: { height: 44, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }, planButtonText: { color: "#123B57", fontSize: 14, fontWeight: "800" }, notice: { fontSize: 13, fontWeight: "700", lineHeight: 19 }, section: { gap: 4, marginTop: 2 }, sectionTitle: { fontSize: 20, fontWeight: "800" }, adaptationCard: { gap: 12 }, cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 }, platformGlyph: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" }, platformCopy: { flex: 1, gap: 3 }, platformName: { fontSize: 16, fontWeight: "800" }, platformFormat: { fontSize: 12, fontWeight: "700" }, focus: { fontSize: 15, lineHeight: 22, fontWeight: "700" }, caption: { fontSize: 13, lineHeight: 19 }, status: { fontSize: 13, lineHeight: 19 }, refine: { height: 46, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }, refineText: { fontSize: 14, fontWeight: "800" }, preview: { height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }, previewText: { fontSize: 14, fontWeight: "800" }, evidence: { flexDirection: "row", gap: 12, alignItems: "flex-start" }, evidenceIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" }, evidenceCopy: { flex: 1, gap: 3 }, evidenceTitle: { fontSize: 14, fontWeight: "800" }, evidenceText: { fontSize: 13, lineHeight: 19 }, empty: { fontSize: 20, lineHeight: 28, fontWeight: "800" }, back: { marginTop: 16, height: 48, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] } });
+const styles = StyleSheet.create({ content: { gap: 14, paddingTop: 16, paddingBottom: 20 }, header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 2 }, iconButton: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, headerCopy: { flex: 1, gap: 2 }, sourceName: { fontSize: 17, fontWeight: "800" }, sourceCard: { gap: 12, padding: 19 }, sourceCardTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, sourceCardTitle: { color: "#F1FAFF", fontSize: 22, fontWeight: "800" }, sourceCardCopy: { color: "#B4D2E3", fontSize: 14, lineHeight: 21 }, targetRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, targetChip: { minHeight: 36, borderRadius: 12, borderWidth: 1, paddingHorizontal: 11, justifyContent: "center" }, targetChipText: { color: "#F1FAFF", fontSize: 12, fontWeight: "800" }, connectionPanel: { gap: 9, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#2A6586", paddingTop: 12 }, connectionPanelHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, connectionEyebrow: { color: "#89B8D0", fontSize: 10, fontWeight: "900", letterSpacing: 1 }, connectionRefresh: { minHeight: 28, justifyContent: "center" }, connectionRefreshText: { color: "#55E6FF", fontSize: 12, fontWeight: "800" }, connectionRow: { gap: 3 }, connectionPlatform: { color: "#F1FAFF", fontSize: 13, fontWeight: "800" }, connectionCopy: { gap: 2 }, connectionLabel: { fontSize: 12, fontWeight: "800" }, connectionDetail: { color: "#B4D2E3", fontSize: 12, lineHeight: 17 }, connectionUnavailable: { color: "#B4D2E3", fontSize: 12, lineHeight: 17 }, planButton: { height: 44, borderRadius: 13, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }, planButtonText: { color: "#123B57", fontSize: 14, fontWeight: "800" }, notice: { fontSize: 13, fontWeight: "700", lineHeight: 19 }, section: { gap: 4, marginTop: 2 }, sectionTitle: { fontSize: 20, fontWeight: "800" }, adaptationCard: { gap: 12 }, cardHeader: { flexDirection: "row", alignItems: "center", gap: 10 }, platformGlyph: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" }, platformCopy: { flex: 1, gap: 3 }, platformName: { fontSize: 16, fontWeight: "800" }, platformFormat: { fontSize: 12, fontWeight: "700" }, focus: { fontSize: 15, lineHeight: 22, fontWeight: "700" }, caption: { fontSize: 13, lineHeight: 19 }, status: { fontSize: 13, lineHeight: 19 }, refine: { height: 46, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }, refineText: { fontSize: 14, fontWeight: "800" }, preview: { height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 }, previewText: { fontSize: 14, fontWeight: "800" }, evidence: { flexDirection: "row", gap: 12, alignItems: "flex-start" }, evidenceIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" }, evidenceCopy: { flex: 1, gap: 3 }, evidenceTitle: { fontSize: 14, fontWeight: "800" }, evidenceText: { fontSize: 13, lineHeight: 19 }, empty: { fontSize: 20, lineHeight: 28, fontWeight: "800" }, back: { marginTop: 16, height: 48, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] } });

@@ -6,6 +6,7 @@ import { parseSourceAnalytics } from "@/lib/analytics-contract";
 import { parseProcessingDiagnostic } from "@/lib/processing-contract";
 import { parseWorkspaceSources } from "@/lib/source-sync-contract";
 import { parseWorkspaceActivity } from "@/lib/workspace-activity-contract";
+import { parsePlatformCapabilities, parseWorkspacePlatformAccounts, projectPlatformTargetConnectionStates, type PlatformTargetConnectionState } from "@/lib/platform-target-capabilities";
 import type { CreatorTargetPlatform } from "@/lib/creator-workflow";
 import { clearSecureSession, getSecureSession, saveSecureSession } from "@/lib/secure-session";
 
@@ -122,6 +123,21 @@ export async function getWorkspaceActivity() {
   const response = await viralBoostRequest("/api/v1/auth/workspace-activity?limit=5");
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseWorkspaceActivity(await response.json());
+}
+
+export async function getPlatformTargetConnectionStates(): Promise<PlatformTargetConnectionState[]> {
+  const [accountsResponse, capabilitiesResponse] = await Promise.all([
+    viralBoostRequest("/api/v1/accounts?limit=100"),
+    viralBoostRequest("/api/v1/accounts/capabilities"),
+  ]);
+  if (!accountsResponse.ok) throw new Error(await parseApiError(accountsResponse));
+  if (!capabilitiesResponse.ok) throw new Error(await parseApiError(capabilitiesResponse));
+  const [accountsPayload, capabilitiesPayload] = await Promise.all([accountsResponse.json(), capabilitiesResponse.json()]);
+  return projectPlatformTargetConnectionStates(
+    ["tiktok", "instagram", "youtube", "linkedin"],
+    parseWorkspacePlatformAccounts(accountsPayload),
+    parsePlatformCapabilities(capabilitiesPayload)
+  );
 }
 
 export async function prepareAdaptationPlan(videoId: string, platforms: CreatorTargetPlatform[]) {

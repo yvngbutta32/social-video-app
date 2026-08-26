@@ -1,0 +1,32 @@
+import { describe, expect, it } from "vitest";
+
+import { parsePlatformCapabilities, parseWorkspacePlatformAccounts, projectPlatformTargetConnectionStates } from "./platform-target-capabilities";
+
+describe("platform target capability projection", () => {
+  const capabilities = parsePlatformCapabilities({
+    data: [
+      { platform: "tiktok", label: "TikTok", officialPublishing: "direct_post", creatorAccountRequirement: "Official TikTok creator account", readiness: "connector_required", safeguards: ["Creator approval remains required."] },
+      { platform: "instagram", label: "Instagram", officialPublishing: "media_publish", creatorAccountRequirement: "Official Instagram professional account", readiness: "connector_required", safeguards: ["Creator approval remains required."] },
+      { platform: "linkedin", label: "LinkedIn", officialPublishing: "not_configured", creatorAccountRequirement: "Official LinkedIn account", readiness: "connector_required", safeguards: ["No publishing is enabled until an official connector is implemented and tested."] },
+    ],
+  });
+
+  it("projects connected, connection-required, and unavailable states from verified response fields", () => {
+    const accounts = parseWorkspacePlatformAccounts({ data: [{ platform: "tiktok", username: "creator", displayName: "Creator One", isActive: true, connectionState: "connected" }] });
+    expect(projectPlatformTargetConnectionStates(["tiktok", "instagram", "linkedin"], accounts, capabilities)).toEqual([
+      expect.objectContaining({ platform: "tiktok", state: "connected", accountName: "Creator One" }),
+      expect.objectContaining({ platform: "instagram", state: "connection_required" }),
+      expect.objectContaining({ platform: "linkedin", state: "official_connector_unavailable" }),
+    ]);
+  });
+
+  it("keeps expired authorizations distinct from a verified active account", () => {
+    const accounts = parseWorkspacePlatformAccounts({ data: [{ platform: "tiktok", username: "creator", displayName: null, isActive: true, connectionState: "token_expired" }] });
+    expect(projectPlatformTargetConnectionStates(["tiktok"], accounts, capabilities)[0]).toMatchObject({ state: "connection_required", label: "Reconnect creator account" });
+  });
+
+  it("rejects malformed response envelopes rather than inventing a capability state", () => {
+    expect(() => parsePlatformCapabilities({ data: {} })).toThrow(/unavailable/i);
+    expect(() => parseWorkspacePlatformAccounts({})).toThrow(/unavailable/i);
+  });
+});
