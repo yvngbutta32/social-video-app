@@ -105,3 +105,4 @@
 - [x] Test migration of cached creator state that predates platform target preferences.
 - [x] Publish an evidence-based current-state product scorecard with explicit release-gate caveats.
 - [x] Project verified official-account capability states into native creator platform target selection.
+- [x] Improve native Review accessibility semantics for target selection and verified connection status.
