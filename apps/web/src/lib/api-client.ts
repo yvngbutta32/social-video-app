@@ -8,7 +8,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, accessToken?: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T>(path: string, accessToken?: string, init?: RequestInit, workspaceId?: string): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set('Accept', 'application/json');
   if (init?.body && !(typeof FormData !== 'undefined' && init.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -17,6 +17,7 @@ export async function apiRequest<T>(path: string, accessToken?: string, init?: R
   if (accessToken) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
+  if (workspaceId) headers.set('x-workspace-id', workspaceId);
 
   const response = await fetch(`/api/v1${path}`, {
     ...init,
@@ -210,10 +211,10 @@ export type ProcessingDiagnostic = {
   safeguards: string[];
 };
 
-export function getProcessingDiagnostics(videoId: string, accessToken?: string) {
-  return apiRequest<{ data: { videoId: string; updatedAt: string; diagnostic: ProcessingDiagnostic } }>(`/videos/${videoId}/processing-diagnostics`, accessToken);
+export function getProcessingDiagnostics(videoId: string, accessToken?: string, workspaceId?: string) {
+  return apiRequest<{ data: { videoId: string; updatedAt: string; diagnostic: ProcessingDiagnostic } }>(`/videos/${videoId}/processing-diagnostics`, accessToken, undefined, workspaceId);
 }
 
-export function retryVideoProcessing(videoId: string, accessToken?: string) {
-  return apiRequest<{ data: { videoId: string; manualRetryCount: number; nextStep: string } }>(`/videos/${videoId}/retry-processing`, accessToken, { method: 'POST' });
+export function retryVideoProcessing(videoId: string, accessToken?: string, workspaceId?: string) {
+  return apiRequest<{ data: { videoId: string; manualRetryCount: number; nextStep: string } }>(`/videos/${videoId}/retry-processing`, accessToken, { method: 'POST' }, workspaceId);
 }

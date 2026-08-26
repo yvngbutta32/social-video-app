@@ -2,8 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import type { LocalCreatorMedia } from "./media-import";
 import { loadCreatorState, saveCreatorState } from "./creator-storage";
+import { reconcileWorkspaceSources, type WorkspaceSourceSummary } from "./source-sync-contract";
 
-export type SourceStatus = "ready_to_queue" | "uploading" | "processing" | "ready" | "failed";
+export type SourceStatus = "ready_to_queue" | "uploading" | "processing" | "ready" | "failed" | "archived";
 
 export type MultipartUploadRecovery = {
   videoId: string;
@@ -12,7 +13,9 @@ export type MultipartUploadRecovery = {
   uploadedPartNumbers: number[];
 };
 
-export type MobileSource = LocalCreatorMedia & {
+export type MobileSource = Omit<LocalCreatorMedia, "uri" | "origin"> & {
+  uri: string | null;
+  origin: LocalCreatorMedia["origin"] | "workspace";
   id: string;
   importedAt: string;
   status: SourceStatus;
@@ -43,6 +46,7 @@ type CreatorWorkflowContextValue = {
   recipeFor: (sourceId: string) => MobileEditRecipe;
   saveRecipe: (recipe: Omit<MobileEditRecipe, "revision">) => void;
   replaceRecipe: (recipe: MobileEditRecipe) => void;
+  syncWorkspaceSources: (sources: WorkspaceSourceSummary[]) => void;
 };
 
 const CreatorWorkflowContext = createContext<CreatorWorkflowContextValue | null>(null);
@@ -106,6 +110,19 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     setRecipes((current) => ({ ...current, [recipe.sourceId]: recipe }));
   }, []);
 
+  const syncWorkspaceSources = useCallback((incoming: WorkspaceSourceSummary[]) => {
+    setSources((current) => reconcileWorkspaceSources(current, incoming));
+    setRecipes((current) => {
+      const next = { ...current };
+      for (const source of incoming) {
+        const existing = sources.find((item) => item.serverVideoId === source.id);
+        const sourceId = existing?.id ?? `server-${source.id}`;
+        if (!next[sourceId]) next[sourceId] = createDefaultRecipe(sourceId);
+      }
+      return next;
+    });
+  }, [sources]);
+
   const value = useMemo(() => ({
     sources,
     selectedSourceId,
@@ -115,7 +132,8 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     recipeFor,
     saveRecipe,
     replaceRecipe,
-  }), [addLocalSource, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, sources, updateSource]);
+    syncWorkspaceSources,
+  }), [addLocalSource, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, sources, syncWorkspaceSources, updateSource]);
 
   return <CreatorWorkflowContext.Provider value={value}>{children}</CreatorWorkflowContext.Provider>;
 }

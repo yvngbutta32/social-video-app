@@ -66,6 +66,7 @@ export async function uploadCreatorSourceResumable(
   source: MobileSource,
   onRecovery: (recovery: MultipartUploadRecovery) => void,
 ) {
+  if (!source.uri) throw new Error("This source is stored in your private workspace but is not available as a device file to upload again.");
   const file = new File(source.uri);
   if (!file.exists || file.size <= 0) throw new Error("This source is no longer available on this device. Import it again before uploading.");
   let recovery = source.multipartUpload ? await refreshMultipartUpload(source.multipartUpload) : await initiateMultipartUpload(source, file.size);
@@ -87,6 +88,7 @@ export async function uploadCreatorSourceResumable(
 }
 
 export async function uploadCreatorSource(source: MobileSource) {
+  if (!source.uri) throw new Error("This source is stored in your private workspace but is not available as a device file to upload again.");
   const file = new File(source.uri);
   if (!file.exists || file.size <= 0) {
     throw new Error("This source is no longer available on this device. Import it again before uploading.");

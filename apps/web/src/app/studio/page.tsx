@@ -165,12 +165,12 @@ export default function GrowthStudioPage() {
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [sourceStatus, setSourceStatus] = useState<ApiVideo['status'] | null>(null);
   const [fingerprintSignals, setFingerprintSignals] = useState(sourceSignals);
-  const { accessToken } = useBrowserSession();
+  const { accessToken, workspaceId } = useBrowserSession();
 
   const sourcesQuery = useQuery({
-    queryKey: ['studio', 'sources', accessToken],
-    queryFn: () => apiRequest<{ data: ApiVideo[] }>('/videos?status=ready&limit=20', accessToken),
-    enabled: Boolean(accessToken),
+    queryKey: ['studio', 'sources', accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: ApiVideo[] }>('/videos?status=ready&limit=20', accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId),
   });
   const accountsQuery = useQuery({
     queryKey: ['studio', 'accounts', accessToken],
@@ -178,7 +178,7 @@ export default function GrowthStudioPage() {
     enabled: Boolean(accessToken),
   });
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => { const form = new FormData(); form.append('file', file); return apiRequest<{ data: ApiVideo; nextStep: string }>('/videos/upload', accessToken, { method: 'POST', body: form }); },
+    mutationFn: (file: File) => { if (!workspaceId) throw new Error('Select an authorized workspace before uploading a private source.'); const form = new FormData(); form.append('file', file); return apiRequest<{ data: ApiVideo; nextStep: string }>('/videos/upload', accessToken, { method: 'POST', body: form }, workspaceId); },
     onSuccess: (response) => { setSourceId(response.data.id); setSourceStatus(response.data.status); setFileName(response.data.originalFilename || response.data.title || 'Uploaded source video'); void sourcesQuery.refetch(); toast.success('Source stored privately; processing is now queued'); },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not upload this source'),
   });
@@ -188,20 +188,20 @@ export default function GrowthStudioPage() {
     enabled: Boolean(accessToken && sourceId),
   });
   const sourceStatusQuery = useQuery({
-    queryKey: ['studio', 'source-status', sourceId, accessToken],
-    queryFn: () => apiRequest<{ data: ApiVideo }>(`/videos/${sourceId}`, accessToken),
-    enabled: Boolean(accessToken && sourceId && sourceStatus && sourceStatus !== 'ready'),
+    queryKey: ['studio', 'source-status', sourceId, accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: ApiVideo }>(`/videos/${sourceId}`, accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId && sourceStatus && sourceStatus !== 'ready'),
     refetchInterval: 4000,
   });
   const effectiveSourceStatus = sourceStatusQuery.data?.data.status ?? sourceStatus;
   const processingDiagnosticsQuery = useQuery({
-    queryKey: ['studio', 'processing-diagnostics', sourceId, accessToken],
-    queryFn: () => getProcessingDiagnostics(sourceId!, accessToken),
-    enabled: Boolean(accessToken && sourceId),
+    queryKey: ['studio', 'processing-diagnostics', sourceId, accessToken, workspaceId],
+    queryFn: () => getProcessingDiagnostics(sourceId!, accessToken, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId),
     refetchInterval: effectiveSourceStatus === 'ready' ? false : 4000,
   });
   const retryProcessingMutation = useMutation({
-    mutationFn: () => retryVideoProcessing(sourceId!, accessToken),
+    mutationFn: () => retryVideoProcessing(sourceId!, accessToken, workspaceId),
     onSuccess: () => {
       setSourceStatus('processing');
       void sourceStatusQuery.refetch();

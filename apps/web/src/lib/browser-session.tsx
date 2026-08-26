@@ -4,13 +4,18 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 type BrowserSessionStatus = 'loading' | 'authenticated' | 'anonymous';
 type BrowserUser = { id: string; email: string; name?: string | null; role?: string };
+type BrowserWorkspace = { id: string; name: string | null; slug: string | null };
 type LoginInput = { email: string; password: string; rememberMe?: boolean };
 type AuthPayload = { data?: { accessToken?: string; user?: BrowserUser }; message?: string; error?: string };
+type MePayload = { data?: { workspaces?: { workspace?: { id?: string; name?: string | null; slug?: string | null } }[] } };
 
 type BrowserSessionContextValue = {
   accessToken?: string;
   user: BrowserUser | null;
   status: BrowserSessionStatus;
+  workspaces: BrowserWorkspace[];
+  workspaceId?: string;
+  selectWorkspace: (workspaceId: string) => void;
   signIn: (input: LoginInput) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -31,24 +36,37 @@ function readAuthPayload(payload: AuthPayload) {
   return { accessToken, user: payload.data?.user ?? null };
 }
 
+async function loadWorkspaces(accessToken: string): Promise<BrowserWorkspace[]> {
+  const response = await fetch('/api/v1/auth/me', { credentials: 'include', headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' } });
+  const payload = await response.json().catch(() => ({})) as MePayload;
+  if (!response.ok) return [];
+  return (payload.data?.workspaces ?? []).flatMap((membership) => {
+    const workspace = membership.workspace;
+    return workspace?.id ? [{ id: workspace.id, name: workspace.name ?? null, slug: workspace.slug ?? null }] : [];
+  });
+}
+
 export function BrowserSessionProvider({ children }: PropsWithChildren) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<BrowserUser | null>(null);
   const [status, setStatus] = useState<BrowserSessionStatus>('loading');
+  const [workspaces, setWorkspaces] = useState<BrowserWorkspace[]>([]);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+
+  const establishSession = useCallback(async (payload: AuthPayload) => {
+    const session = readAuthPayload(payload);
+    const nextWorkspaces = await loadWorkspaces(session.accessToken);
+    setAccessToken(session.accessToken);
+    setUser(session.user);
+    setWorkspaces(nextWorkspaces);
+    setWorkspaceId((current) => current && nextWorkspaces.some((workspace) => workspace.id === current) ? current : (nextWorkspaces.length === 1 ? nextWorkspaces[0].id : null));
+    setStatus('authenticated');
+  }, []);
 
   const refresh = useCallback(async () => {
-    try {
-      const payload = await jsonRequest('/api/v1/auth/refresh', { method: 'POST', body: JSON.stringify({}) });
-      const session = readAuthPayload(payload);
-      setAccessToken(session.accessToken);
-      setUser(session.user);
-      setStatus('authenticated');
-    } catch {
-      setAccessToken(null);
-      setUser(null);
-      setStatus('anonymous');
-    }
-  }, []);
+    try { await establishSession(await jsonRequest('/api/v1/auth/refresh', { method: 'POST', body: JSON.stringify({}) })); }
+    catch { setAccessToken(null); setUser(null); setWorkspaces([]); setWorkspaceId(null); setStatus('anonymous'); }
+  }, [establishSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,14 +74,19 @@ export function BrowserSessionProvider({ children }: PropsWithChildren) {
       try {
         const payload = await jsonRequest('/api/v1/auth/refresh', { method: 'POST', body: JSON.stringify({}) });
         const session = readAuthPayload(payload);
+        const nextWorkspaces = await loadWorkspaces(session.accessToken);
         if (cancelled) return;
         setAccessToken(session.accessToken);
         setUser(session.user);
+        setWorkspaces(nextWorkspaces);
+        setWorkspaceId(nextWorkspaces.length === 1 ? nextWorkspaces[0].id : null);
         setStatus('authenticated');
       } catch {
         if (cancelled) return;
         setAccessToken(null);
         setUser(null);
+        setWorkspaces([]);
+        setWorkspaceId(null);
         setStatus('anonymous');
       }
     })();
@@ -71,21 +94,19 @@ export function BrowserSessionProvider({ children }: PropsWithChildren) {
   }, []);
 
   const signIn = useCallback(async (input: LoginInput) => {
-    const payload = await jsonRequest('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email: input.email.trim().toLowerCase(), password: input.password, rememberMe: Boolean(input.rememberMe) }) });
-    const session = readAuthPayload(payload);
-    setAccessToken(session.accessToken);
-    setUser(session.user);
-    setStatus('authenticated');
-  }, []);
+    await establishSession(await jsonRequest('/api/v1/auth/login', { method: 'POST', body: JSON.stringify({ email: input.email.trim().toLowerCase(), password: input.password, rememberMe: Boolean(input.rememberMe) }) }));
+  }, [establishSession]);
 
   const signOut = useCallback(async () => {
     await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined);
-    setAccessToken(null);
-    setUser(null);
-    setStatus('anonymous');
+    setAccessToken(null); setUser(null); setWorkspaces([]); setWorkspaceId(null); setStatus('anonymous');
   }, []);
 
-  const value = useMemo(() => ({ accessToken: accessToken ?? undefined, user, status, signIn, signOut, refresh }), [accessToken, user, status, signIn, signOut, refresh]);
+  const selectWorkspace = useCallback((nextWorkspaceId: string) => {
+    if (workspaces.some((workspace) => workspace.id === nextWorkspaceId)) setWorkspaceId(nextWorkspaceId);
+  }, [workspaces]);
+
+  const value = useMemo(() => ({ accessToken: accessToken ?? undefined, user, status, workspaces, workspaceId: workspaceId ?? undefined, selectWorkspace, signIn, signOut, refresh }), [accessToken, user, status, workspaces, workspaceId, selectWorkspace, signIn, signOut, refresh]);
   return <BrowserSessionContext.Provider value={value}>{children}</BrowserSessionContext.Provider>;
 }
 

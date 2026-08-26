@@ -22,7 +22,9 @@
     "test:intelligence-boundary": "tsx scripts/verify-intelligence-boundary.ts",
     "test:webhook-security": "tsx scripts/verify-webhook-security.ts",
     "test:cors-workspace-header": "tsx scripts/verify-cors-workspace-header.ts",
-    "test:multipart-upload": "tsx scripts/verify-multipart-upload-contract.ts"
+    "test:multipart-upload": "tsx scripts/verify-multipart-upload-contract.ts",
+    "test:source-list-workspace": "tsx scripts/verify-source-list-workspace.ts",
+    "test:json-safe": "tsx scripts/verify-json-safe.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

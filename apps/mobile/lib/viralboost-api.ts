@@ -4,6 +4,7 @@ import { parseAdaptationDetail, parseAdaptationPlan, parseAdaptationSave, parseP
 import { parseNativeAuthData, selectWorkspaceId } from "@/lib/mobile-auth-contract";
 import { parseSourceAnalytics } from "@/lib/analytics-contract";
 import { parseProcessingDiagnostic } from "@/lib/processing-contract";
+import { parseWorkspaceSources } from "@/lib/source-sync-contract";
 import { clearSecureSession, getSecureSession, saveSecureSession } from "@/lib/secure-session";
 
 function apiBaseUrl() {
@@ -79,6 +80,12 @@ export async function getSourceAnalytics(videoId: string) {
   const response = await viralBoostRequest(`/api/v1/videos/${videoId}/analytics`);
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseSourceAnalytics(await response.json());
+}
+
+export async function getWorkspaceSources() {
+  const response = await viralBoostRequest("/api/v1/videos?limit=50&sortBy=updatedAt&sortOrder=desc");
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseWorkspaceSources(await response.json());
 }
 
 export async function prepareAdaptationPlan(videoId: string) {

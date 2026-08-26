@@ -49,3 +49,12 @@
 - [x] Verify the server adaptation render-state and artifact-status contract for native lifecycle feedback.
 - [x] Add a refreshable native render lifecycle view after server-backed Edit Lab saves.
 - [ ] Validate native render lifecycle refresh and artifact review against a deployed renderer before release.
+- [x] Verify the self-owned workspace source-list contract and mobile-safe cross-device mapping.
+- [x] Synchronize server-authoritative sources into the native Library without overwriting local drafts or device-only import state.
+- [x] Correct the source-list endpoint so it enforces the explicit selected workspace rather than an arbitrary membership.
+- [x] Serialize workspace source-list numeric values safely for native and browser JSON consumers.
+- [x] Deliver a premium server-authoritative source library with explicit local, synchronized, processing, and recovery states.
+- [x] Require explicit workspace authorization and JSON-safe responses for every source upload and detail endpoint.
+- [x] Update the web source client to send the selected workspace header on all authenticated source requests.
+- [x] Persist and expose an explicit authorized workspace selection in the self-owned browser session.
+- [ ] Validate cross-device workspace source synchronization with an invited multi-workspace test account before release.

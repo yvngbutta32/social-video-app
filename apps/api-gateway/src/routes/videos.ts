@@ -8,6 +8,7 @@ import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pi
 import { MAX_MULTIPART_SOURCE_PARTS, MULTIPART_SOURCE_PART_BYTES, abortMultipartSourceUpload, completeMultipartSourceUpload, createMultipartPartUrl, createMultipartSourceUpload, listMultipartSourceParts, multipartPartCount, uploadSource } from '../lib/source-storage.js';
 import { enqueueVideoProcessing } from '../lib/processing-dispatch';
 import { buildProcessingDiagnostic } from '../lib/processing-diagnostics.js';
+import { jsonSafe } from '../lib/json-safe.js';
 
 const videoSchema = z.object({
   title: z.string().min(1).max(200),
@@ -70,24 +71,24 @@ async function creatorWorkspaceForRequest(c: any, user: { id: string; email: str
   return workspaceId;
 }
 
+async function workspaceForReadRequest(c: any, user: { id: string; email: string; role: string }) {
+  const workspaceId = c.req.header('x-workspace-id');
+  if (!workspaceId) throw new HTTPException(400, { message: 'A valid x-workspace-id header is required for workspace source requests.' });
+  await requireWorkspaceAccess(user, workspaceId);
+  return workspaceId;
+}
+
+function requireSelectedSourceWorkspace(sourceWorkspaceId: string, selectedWorkspaceId: string) {
+  if (sourceWorkspaceId !== selectedWorkspaceId) throw new HTTPException(404, { message: 'Video not found' });
+}
+
 export function createVideoRoutes() {
   const app = new Hono<{ Variables: Variables }>();
 
   app.get('/', zValidator('query', querySchema), async (c: any) => {
     const { page, limit, platform, status, campaignId, sortBy, sortOrder } = c.req.valid('query');
     const user = c.get('user');
-    
-    // Get user's workspace
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await workspaceForReadRequest(c, user);
     
     // Build where clause
     const where: any = { workspaceId };
@@ -136,10 +137,10 @@ export function createVideoRoutes() {
       prisma.video.count({ where }),
     ]);
     
-    return c.json({
+    return c.json(jsonSafe({
       data: videos,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    });
+    }));
   });
 
   app.post('/uploads/multipart/initiate', zValidator('json', multipartInitiateSchema), async (c: any) => {
@@ -178,9 +179,10 @@ export function createVideoRoutes() {
 
   app.get('/uploads/multipart/:id', async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, status: true, metadata: true } });
     if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
-    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    requireSelectedSourceWorkspace(video.workspaceId, workspaceId);
     const session = multipartSession(video.metadata);
     if (!session) throw new HTTPException(409, { message: 'This source does not have an active resumable upload session.' });
     let completedParts;
@@ -191,9 +193,10 @@ export function createVideoRoutes() {
 
   app.post('/uploads/multipart/:id/part-url', zValidator('json', z.object({ partNumber: z.number().int().positive() })), async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, metadata: true, status: true } });
     if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
-    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    requireSelectedSourceWorkspace(video.workspaceId, workspaceId);
     const session = multipartSession(video.metadata);
     const { partNumber } = c.req.valid('json');
     if (!session || video.status !== 'uploading' || partNumber > session.partCount) throw new HTTPException(409, { message: 'This private upload part is not available.' });
@@ -207,9 +210,10 @@ export function createVideoRoutes() {
 
   app.post('/uploads/multipart/:id/complete', async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, metadata: true, status: true } });
     if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
-    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    requireSelectedSourceWorkspace(video.workspaceId, workspaceId);
     const session = multipartSession(video.metadata);
     if (!session || video.status !== 'uploading') throw new HTTPException(409, { message: 'This private upload is not ready to complete.' });
     let parts;
@@ -232,9 +236,10 @@ export function createVideoRoutes() {
 
   app.delete('/uploads/multipart/:id', async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, metadata: true, status: true } });
     if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
-    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    requireSelectedSourceWorkspace(video.workspaceId, workspaceId);
     const session = multipartSession(video.metadata);
     if (!session || video.status !== 'uploading') throw new HTTPException(409, { message: 'This private upload can no longer be cancelled.' });
     try { await abortMultipartSourceUpload({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId }); }
@@ -245,16 +250,9 @@ export function createVideoRoutes() {
 
   app.post('/upload', async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     const body = await c.req.parseBody();
     const candidate = body.file as { name?: string; type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | undefined;
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No creator workspace access' });
-    }
     if (!candidate || typeof candidate.arrayBuffer !== 'function') {
       throw new HTTPException(400, { message: 'A video file is required.' });
     }
@@ -277,11 +275,11 @@ export function createVideoRoutes() {
       throw new HTTPException(413, { message: `Source video exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB upload limit or is empty.` });
     }
 
-    const stored = await uploadSource({ workspaceId: workspaceMember.workspaceId, originalFilename: name, contentType, body: buffer });
+    const stored = await uploadSource({ workspaceId, originalFilename: name, contentType, body: buffer });
     const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim().slice(0, 200) : name.replace(/\.[^.]+$/, '');
     const video = await prisma.video.create({
       data: {
-        workspaceId: workspaceMember.workspaceId,
+        workspaceId,
         uploadedBy: user.id,
         title,
         originalFilename: name,
@@ -312,25 +310,27 @@ export function createVideoRoutes() {
 
   app.get('/:id/processing-diagnostics', async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await workspaceForReadRequest(c, user);
     const id = c.req.param('id');
     const video = await prisma.video.findUnique({
       where: { id },
       select: { id: true, workspaceId: true, status: true, metadata: true, updatedAt: true },
     });
     if (!video) throw new HTTPException(404, { message: 'Video not found' });
-    await requireWorkspaceAccess(user, video.workspaceId);
+    requireSelectedSourceWorkspace(video.workspaceId, workspaceId);
     return c.json({ data: { videoId: video.id, updatedAt: video.updatedAt.toISOString(), diagnostic: buildProcessingDiagnostic(video) } });
   });
 
   app.post('/:id/retry-processing', async (c: any) => {
     const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     const id = c.req.param('id');
     const video = await prisma.video.findUnique({
       where: { id },
       select: { id: true, workspaceId: true, status: true, metadata: true },
     });
     if (!video) throw new HTTPException(404, { message: 'Video not found' });
-    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    requireSelectedSourceWorkspace(video.workspaceId, workspaceId);
 
     const diagnostic = buildProcessingDiagnostic(video);
     if (!diagnostic.retry.allowed) {
@@ -375,18 +375,9 @@ export function createVideoRoutes() {
   app.get('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
+    const workspaceId = await workspaceForReadRequest(c, user);
     const video = await prisma.video.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: {
         variants: {
           include: {
@@ -407,7 +398,7 @@ export function createVideoRoutes() {
       throw new HTTPException(404, { message: 'Video not found' });
     }
     
-    return c.json({ data: video });
+    return c.json(jsonSafe({ data: video }));
   });
 
   app.post('/', zValidator('json', videoSchema), async () => {
