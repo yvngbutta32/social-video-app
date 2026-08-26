@@ -6,6 +6,7 @@ import { sign, verify } from 'hono/jwt';
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { NATIVE_CLIENT_HEADER, withNativeRefreshToken } from '../lib/native-client-auth.js';
 import type { Variables } from '../index.js';
 
 const registerSchema = z.object({
@@ -157,10 +158,10 @@ export function createAuthRoutes() {
     });
     
     return c.json({ 
-      data: { 
+      data: withNativeRefreshToken({
         user: { id: user.id, email: user.email, name: user.name, role: user.role, workspaceId: workspace.id },
         accessToken 
-      },
+      }, refreshToken, c.req.header(NATIVE_CLIENT_HEADER)),
       message: 'Pilot registration successful'
     }, 201);
   });
@@ -206,10 +207,10 @@ export function createAuthRoutes() {
     });
     
     return c.json({ 
-      data: { 
+      data: withNativeRefreshToken({
         user: { id: user.id, email: user.email, name: user.name },
         accessToken 
-      }, 
+      }, refreshToken, c.req.header(NATIVE_CLIENT_HEADER)),
       message: 'Login successful' 
     });
   });
@@ -254,10 +255,10 @@ export function createAuthRoutes() {
       });
       
       return c.json({ 
-        data: { 
+        data: withNativeRefreshToken({
           user: { id: user.id, email: user.email, name: user.name },
           accessToken 
-        } 
+        }, newRefreshToken, c.req.header(NATIVE_CLIENT_HEADER))
       });
     } catch {
       throw new HTTPException(401, { message: 'Invalid refresh token' });
