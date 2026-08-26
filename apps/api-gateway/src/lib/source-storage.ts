@@ -1,4 +1,5 @@
-import { CreateBucketCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CreateBucketCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
@@ -25,10 +26,10 @@ function storageConfig() {
   };
 }
 
-function client() {
+function client(endpoint?: string) {
   const config = storageConfig();
   return new S3Client({
-    endpoint: config.endpoint,
+    endpoint: endpoint || config.endpoint,
     region: 'us-east-1',
     credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
     forcePathStyle: true,
@@ -50,6 +51,28 @@ async function ensureBucket(s3: S3Client, bucket: string) {
 export function sourceObjectKey(workspaceId: string, originalFilename: string) {
   const extension = originalFilename.toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0] || '.mp4';
   return `workspaces/${workspaceId}/sources/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
+}
+
+export async function createPrivatePreviewUrl(input: {
+  key: string;
+  bucket?: string | null;
+  expiresInSeconds?: number;
+}) {
+  const config = storageConfig();
+  if (!config.accessKeyId || !config.secretAccessKey) {
+    throw new Error('Private artifact preview storage credentials are not configured');
+  }
+  const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+  if (!publicEndpoint) {
+    throw new Error('Private artifact preview is unavailable until MINIO_PUBLIC_ENDPOINT is configured for browser access');
+  }
+  const normalizedPublicEndpoint = /^https?:\/\//.test(publicEndpoint) ? publicEndpoint : `https://${publicEndpoint}`;
+  const expiresIn = Math.min(Math.max(input.expiresInSeconds ?? 300, 60), 900);
+  return getSignedUrl(client(normalizedPublicEndpoint), new GetObjectCommand({
+    Bucket: input.bucket || config.bucket,
+    Key: input.key,
+    ResponseContentDisposition: 'inline',
+  }), { expiresIn });
 }
 
 export async function uploadSource(input: {

@@ -157,3 +157,15 @@ export type LearningSignal = {
   explanation: string;
   safeguards: string[];
 };
+
+
+export type AdaptationPreview = {
+  kind: 'video' | 'thumbnail';
+  url: string;
+  expiresAt: string;
+  safeguards: string[];
+};
+
+export function getAdaptationPreview(variantId: string, kind: 'video' | 'thumbnail' = 'video', accessToken?: string) {
+  return apiRequest<{ data: AdaptationPreview }>(`/growth/adaptations/${variantId}/preview?kind=${kind}`, accessToken);
+}

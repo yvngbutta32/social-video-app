@@ -18,6 +18,7 @@ import { buildExperimentScorecard } from '../lib/experiment-scorecard.js';
 import { buildReachPlan } from '../lib/reach-plan.js';
 import { metricFreshness } from '../lib/metric-ingestion.js';
 import { enqueueVariantRendering } from '../lib/processing-dispatch.js';
+import { createPrivatePreviewUrl } from '../lib/source-storage.js';
 import {
   adaptationRecipeSchema,
   applyManualAdaptationEdit,
@@ -267,6 +268,41 @@ export function createGrowthRoutes() {
         ],
       },
     });
+  });
+
+  app.get('/adaptations/:variantId/preview', zValidator('query', z.object({ kind: z.enum(['video', 'thumbnail']).default('video') })), async (c: any) => {
+    const actor = c.get('user');
+    const variantId = c.req.param('variantId');
+    const { kind } = c.req.valid('query');
+    const variant = await prisma.videoVariant.findUnique({
+      where: { id: variantId },
+      select: {
+        minioObjectKey: true,
+        thumbnailObjectKey: true,
+        video: { select: { workspaceId: true } },
+      },
+    });
+    if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
+    await requireWorkspaceAccess(actor, variant.video.workspaceId);
+
+    const objectKey = kind === 'thumbnail' ? variant.thumbnailObjectKey : variant.minioObjectKey;
+    if (!objectKey) {
+      throw new HTTPException(409, { message: `No ${kind} artifact is available for this adaptation yet` });
+    }
+    try {
+      const expiresInSeconds = 300;
+      const url = await createPrivatePreviewUrl({ key: objectKey, expiresInSeconds });
+      return c.json({
+        data: {
+          kind,
+          url,
+          expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+          safeguards: ['The preview URL is workspace-authorized, short-lived, and does not expose storage credentials.'],
+        },
+      });
+    } catch (error) {
+      throw new HTTPException(503, { message: error instanceof Error ? error.message : 'Private artifact preview is temporarily unavailable' });
+    }
   });
 
   app.put('/adaptations/:variantId', zValidator('json', manualAdaptationEditSchema), async (c: any) => {

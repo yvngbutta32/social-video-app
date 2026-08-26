@@ -174,3 +174,14 @@ A deterministic `test:analytics-integrity` verification proves that combined cam
 **Validation evidence.** `npm run test:adaptations` verifies automatic recipe defaults, platform duration bounds, creator-edit revisioning, and deterministic render job identity. The API Growth Studio contract, API type-check/build, web lint/type-check/Vitest/production build, production dependency audits, self-hosted intelligence checks, processor syntax checks, and repository diff hygiene all passed. These checks validate contracts and source behavior; a persistent deployment with real PostgreSQL, Redis, MinIO, FFmpeg, and worker services is still required to certify end-to-end artifact rendering.
 
 **Research boundary.** Provider media-transfer guidance and video-editing research have been captured in `MEDIA_ADAPTATION_SOURCES.md`. Those sources inform provider-specific export constraints and the creator-review model; they do not establish a promise of virality, fame, or platform distribution.
+
+
+## Secure artifact review checkpoint
+
+A creator can now review a rendered adaptation through `GET /api/v1/growth/adaptations/:variantId/preview`. The API loads the variant, verifies the requesting user’s workspace membership, selects only the requested video or thumbnail artifact, and issues a five-minute signed retrieval URL. It never returns object-storage credentials or opens an unauthenticated object path. The response includes an expiry timestamp and an explicit short-lived URL safeguard.
+
+Private preview signing intentionally requires `MINIO_PUBLIC_ENDPOINT` in addition to the private storage credential configuration. This prevents the application from returning a signed URL that points at the internal `minio:9000` hostname and cannot be reached by a creator browser. Until the deployment declares a browser-reachable MinIO endpoint, the route returns `503` rather than claiming that review is available.
+
+Growth Studio now shows a private review panel inside the advanced edit workflow. When the current recipe has an artifact, it displays a browser-native video player, explains whether the artifact matches the active recipe or is retained from a prior recipe while a new revision renders, and shows the temporary-link expiry. When no artifact is ready, the interface explains the queued-render boundary rather than presenting an empty player as a completed result.
+
+`npm run test:artifact-preview` verifies that signing uses a browser-reachable endpoint, creates a five-minute URL, avoids exposing the secret value, and rejects preview issuance when the public endpoint is absent. API type-check/build, web lint/type-check/Vitest/production build, adaptation and Growth Studio contracts, and repository diff hygiene passed. Browser playback and S3-compatible signature validation remain deployment-gated until a persistent public endpoint, MinIO, worker, and real artifact exist.
