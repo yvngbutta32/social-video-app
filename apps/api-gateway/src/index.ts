@@ -19,6 +19,7 @@ import { createIntelligenceRoutes } from './routes/intelligence.js';
 import { createOwnerRoutes } from './routes/owner.js';
 import { createGrowthRoutes } from './routes/growth.js';
 import { createPublishingRoutes } from './routes/publishing.js';
+import { createInternalConnectorRoutes } from './routes/internal-connectors.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
 
@@ -47,6 +48,7 @@ app.use('*', cors({
 }));
 
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.route('/internal/connectors', createInternalConnectorRoutes());
 
 app.get('/ready', async (c) => {
   try {

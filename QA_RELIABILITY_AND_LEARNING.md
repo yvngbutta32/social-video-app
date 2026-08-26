@@ -133,3 +133,9 @@ The progress update is workspace-safe through the video ID already authorized by
 The public provider callback endpoint no longer returns a false success for unverified or unprocessed events. TikTok, Instagram, and YouTube callbacks now require a configured deployment secret (environment or secret file), HMAC-SHA256 verification with timing-safe comparison, and optional five-minute timestamp replay protection. Unsupported platforms are rejected, and even a verified callback returns an explicit not-implemented response until a certified connector maps it to a creator-owned account and durable delivery or metric transition.
 
 The regression suite covers valid signed payloads, invalid signatures, stale timestamps, absent configuration, and public-route security messaging. API/web builds and processor syntax validation passed.
+
+## Official metric-ingestion readiness checkpoint
+
+Added the additive `5_metric_ingestion_provenance` migration and schema fields for an idempotent connector `ingestionKey`, immutable connector provenance, and import freshness. A private `/internal/connectors/metrics` contract now accepts only a token-authenticated connector worker, resolves the observation to an active creator-owned scheduled post by social account and platform post ID, upserts its official metric snapshot, and records an `official_metric_ingested` usage event in the same transaction.
+
+Growth Studio scorecards now surface fresh, aging, and stale observation counts. They make data recency visible without implying that metric freshness predicts future reach. The connector token is deployment-secret backed; no creator browser route can submit metric imports. Prisma validation/generation, focused API and web validation, and regression coverage passed. Applying the migration and exercising a real official connector remains a persistent-host release gate.

@@ -10,6 +10,7 @@ import { getPlatformCapability } from '../src/lib/platform-capabilities.js';
 import { buildExperimentScorecard } from '../src/lib/experiment-scorecard.js';
 import { verifyPlatformWebhook } from '../src/lib/platform-webhook-security.js';
 import { createHmac } from 'node:crypto';
+import { buildMetricIngestionKey, metricFreshness, normalizeOfficialMetricSnapshot } from '../src/lib/metric-ingestion.js';
 
 async function main() {
   const plan = buildGrowthExperimentPlan({
@@ -42,6 +43,12 @@ async function main() {
   assert.equal(verifyPlatformWebhook({ platform: 'tiktok', payload: webhookPayload, signature: webhookSignature, timestamp: '1724670000', now: new Date('2024-08-26T12:00:00Z') }).reason, 'timestamp_out_of_window');
   delete process.env.TIKTOK_WEBHOOK_SECRET;
   assert.equal(verifyPlatformWebhook({ platform: 'tiktok', payload: webhookPayload, signature: webhookSignature }).reason, 'provider_webhook_not_configured');
+  const metricSnapshot = normalizeOfficialMetricSnapshot({ platform: 'tiktok', socialAccountId: '11111111-1111-4111-8111-111111111111', externalPostId: 'platform-post-1', observedAt: '2026-08-26T12:00:00.000Z', connector: 'tiktok-content-api', metrics: { views: 1200.4, likes: 84, completionRate: 0.62 } });
+  assert.equal(metricSnapshot.metrics.views, 1200);
+  assert.equal(metricSnapshot.provenance.source, 'official_connector');
+  assert.equal(metricSnapshot.ingestionKey, buildMetricIngestionKey(metricSnapshot));
+  assert.equal(metricFreshness('2026-08-26T11:00:00.000Z', '2026-08-26T11:05:00.000Z', new Date('2026-08-26T12:00:00.000Z')).state, 'fresh');
+  assert.equal(metricFreshness('2026-08-24T11:00:00.000Z', '2026-08-24T11:05:00.000Z', new Date('2026-08-26T12:00:00.000Z')).state, 'stale');
   const scorecard = buildExperimentScorecard({
     objective: 'retention',
     variants: [{ id: 'variant-1', platform: 'tiktok', metrics: [{ scheduledPostId: 'post-1', completionRate: 0.55, recordedAt: '2026-08-25T10:00:00Z' }, { scheduledPostId: 'post-1', completionRate: 0.65, recordedAt: '2026-08-25T11:00:00Z' }] }],
@@ -164,6 +171,8 @@ async function main() {
   assert.match(growthRoute, /buildReachPlan/);
   assert.match(growthRoute, /scorecard/);
   assert.match(growthRoute, /buildExperimentScorecard/);
+  assert.match(growthRoute, /metricFreshness/);
+  assert.match(growthRoute, /importedAt/);
   const accountRoute = await readFile(new URL('../src/routes/accounts.ts', import.meta.url), 'utf8');
   assert.match(accountRoute, /encryptToken\(body\.accessToken\)/);
   assert.match(accountRoute, /accessTokenEncrypted: _accessToken/);
@@ -171,6 +180,15 @@ async function main() {
   assert.match(accountRoute, /app\.get\('\/capabilities'/);
   assert.match(accountRoute, /Official .* connector is not configured yet/);
   assert.doesNotMatch(accountRoute, /return c\.json\(\{ success: true, message: 'Token refreshed'/);
+
+  const connectorRoute = await readFile(new URL('../src/routes/internal-connectors.ts', import.meta.url), 'utf8');
+  assert.match(connectorRoute, /x-connector-token/);
+  assert.match(connectorRoute, /scheduledPostId_ingestionKey/);
+  assert.match(connectorRoute, /official_metric_ingested/);
+  assert.match(connectorRoute, /internal_official_connector/);
+  const ingestionMigration = await readFile(new URL('../../web/prisma/migrations/5_metric_ingestion_provenance/migration.sql', import.meta.url), 'utf8');
+  assert.match(ingestionMigration, /ingestion_key/);
+  assert.match(ingestionMigration, /uq_post_metrics_ingestion/);
 
   const webhookRoute = await readFile(new URL('../src/routes/webhooks.ts', import.meta.url), 'utf8');
   assert.match(webhookRoute, /verifyPlatformWebhook/);

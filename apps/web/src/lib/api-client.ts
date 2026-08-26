@@ -109,6 +109,10 @@ export type ExperimentScorecard = {
   evidenceQuality: 'directional_only' | 'decision_ready_for_review';
   canDeclareWinner: boolean;
   variants: Array<{ variantId: string; platform: string; sampleSize: number; observed: number | null; relativeLift: number | null; state: string; canDeclareWinner: boolean }>;
+  metricFreshness?: {
+    observations: Array<{ scheduledPostId: string; platform: string; observedAt: string; importedAt: string | null; provenance: unknown; state: 'fresh' | 'aging' | 'stale'; ageMs: number; importLagMs: number }>;
+    counts: { fresh: number; aging: number; stale: number };
+  };
   safeguards: string[];
 };
 

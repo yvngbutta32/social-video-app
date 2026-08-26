@@ -16,6 +16,7 @@ import { evaluateLearningSignal } from '../lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
 import { buildExperimentScorecard } from '../lib/experiment-scorecard.js';
 import { buildReachPlan } from '../lib/reach-plan.js';
+import { metricFreshness } from '../lib/metric-ingestion.js';
 
 const sourceSchema = z.object({
   videoId: z.string().uuid(),
@@ -326,7 +327,7 @@ export function createGrowthRoutes() {
       select: {
         id: true,
         platform: true,
-        metrics: { select: { scheduledPostId: true, variantId: true, platform: true, recordedAt: true, views: true, likes: true, comments: true, shares: true, saves: true, followerGain: true, completionRate: true } },
+        metrics: { select: { scheduledPostId: true, variantId: true, platform: true, recordedAt: true, importedAt: true, provenance: true, views: true, likes: true, comments: true, shares: true, saves: true, followerGain: true, completionRate: true } },
       },
     });
     const variantIds = variants.map((variant) => variant.id);
@@ -336,7 +337,22 @@ export function createGrowthRoutes() {
       orderBy: { recordedAt: 'desc' },
       take: 100,
     });
-    return c.json({ data: { sourceVideoId: video.id, ...buildExperimentScorecard({ objective: query.objective as 'views' | 'engagement' | 'followers' | 'retention', variants, baseline }) } });
+    const latestMetricByPost = new Map<string, { scheduledPostId: string; platform: string; recordedAt: Date; importedAt: Date | null; provenance: unknown }>();
+    for (const metric of variants.flatMap((variant) => variant.metrics)) {
+      const current = latestMetricByPost.get(metric.scheduledPostId);
+      if (!current || metric.recordedAt > current.recordedAt) latestMetricByPost.set(metric.scheduledPostId, metric);
+    }
+    const metricFreshnessSummary = [...latestMetricByPost.values()].map((metric) => ({
+      scheduledPostId: metric.scheduledPostId,
+      platform: metric.platform,
+      observedAt: metric.recordedAt,
+      importedAt: metric.importedAt,
+      provenance: metric.provenance,
+      ...metricFreshness(metric.recordedAt, metric.importedAt ?? metric.recordedAt),
+    }));
+    const freshnessCounts: Record<'fresh' | 'aging' | 'stale', number> = { fresh: 0, aging: 0, stale: 0 };
+    for (const metric of metricFreshnessSummary) freshnessCounts[metric.state as 'fresh' | 'aging' | 'stale'] += 1;
+    return c.json({ data: { sourceVideoId: video.id, ...buildExperimentScorecard({ objective: query.objective as 'views' | 'engagement' | 'followers' | 'retention', variants, baseline }), metricFreshness: { observations: metricFreshnessSummary, counts: freshnessCounts } } });
   });
 
   return app;
