@@ -171,3 +171,28 @@ export type AdaptationPreview = {
 export function getAdaptationPreview(variantId: string, kind: 'video' | 'thumbnail' = 'video', accessToken?: string) {
   return apiRequest<{ data: AdaptationPreview }>(`/growth/adaptations/${variantId}/preview?kind=${kind}`, accessToken);
 }
+
+
+export type ClipCandidate = {
+  id: string;
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  source: 'scene_detection' | 'opening_fallback';
+  sceneNumbers: number[];
+  captionCueCount: number;
+  rationale: string;
+  safeguards: string[];
+};
+
+export type ClipCandidateResponse = {
+  videoId: string;
+  platform: string;
+  candidates: ClipCandidate[];
+  evidence: { sceneCount: number; captionCueCount: number; analysisState: 'scene_detection_available' | 'opening_fallback_only' };
+  safeguards: string[];
+};
+
+export function getClipCandidates(videoId: string, platform: string, accessToken?: string) {
+  return apiRequest<{ data: ClipCandidateResponse }>(`/growth/clip-candidates/${videoId}?platform=${encodeURIComponent(platform)}`, accessToken);
+}

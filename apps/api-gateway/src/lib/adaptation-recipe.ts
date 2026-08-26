@@ -70,6 +70,7 @@ export const manualAdaptationEditSchema = z.object({
     message: 'The end of a clip must be after its start.',
     path: ['endSeconds'],
   }).optional(),
+  clipCandidateId: z.string().min(1).max(180).optional(),
   composition: z.object({
     mode: z.enum(compositionModes),
     focalPoint: z.object({
@@ -151,8 +152,10 @@ export function applyManualAdaptationEdit(existing: AdaptationRecipe, edit: Manu
       ? {
         ...existing.sourceRange,
         ...edit.sourceRange,
-        selectionMethod: 'creator_custom',
-        rationale: 'Creator-selected clip range.',
+        selectionMethod: edit.clipCandidateId ? 'scene_candidate' : 'creator_custom',
+        rationale: edit.clipCandidateId
+          ? 'Creator selected a processor-backed scene-aware clip candidate.'
+          : 'Creator-selected clip range.',
       }
       : existing.sourceRange,
     composition: edit.composition ? { ...existing.composition, ...edit.composition } : existing.composition,

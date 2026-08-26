@@ -19,6 +19,7 @@ import { buildReachPlan } from '../lib/reach-plan.js';
 import { metricFreshness } from '../lib/metric-ingestion.js';
 import { enqueueVariantRendering } from '../lib/processing-dispatch.js';
 import { createPrivatePreviewUrl } from '../lib/source-storage.js';
+import { createClipCandidates, extractClipAnalysis } from '../lib/clip-candidates.js';
 import {
   adaptationRecipeSchema,
   applyManualAdaptationEdit,
@@ -38,6 +39,10 @@ const planSchema = sourceSchema.extend({
 
 const learningQuerySchema = z.object({
   objective: z.enum(['views', 'engagement', 'followers', 'retention']).default('retention'),
+});
+
+const clipCandidateQuerySchema = z.object({
+  platform: z.enum(supportedGrowthPlatforms).default('tiktok'),
 });
 
 function videoFingerprint(video: {
@@ -216,6 +221,54 @@ export function createGrowthRoutes() {
     });
   });
 
+  app.get('/clip-candidates/:videoId', zValidator('query', clipCandidateQuerySchema), async (c: any) => {
+    const actor = c.get('user');
+    const videoId = c.req.param('videoId');
+    const { platform } = c.req.valid('query');
+    const video = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: {
+        id: true,
+        workspaceId: true,
+        durationSeconds: true,
+        variants: { select: { generationParams: true }, orderBy: { createdAt: 'asc' } },
+      },
+    });
+    if (!video) throw new HTTPException(404, { message: 'Source video not found' });
+    await requireWorkspaceAccess(actor, video.workspaceId);
+
+    const automaticRecipe = createAutomaticAdaptationRecipe({
+      platform,
+      sourceVideoId: video.id,
+      durationSeconds: video.durationSeconds,
+    });
+    const { scenes, captions } = extractClipAnalysis(video.variants);
+    const candidates = createClipCandidates({
+      durationSeconds: video.durationSeconds,
+      preferredDurationSeconds: automaticRecipe.sourceRange.endSeconds - automaticRecipe.sourceRange.startSeconds,
+      scenes,
+      captions,
+    });
+
+    return c.json({
+      data: {
+        videoId: video.id,
+        platform,
+        candidates,
+        evidence: {
+          sceneCount: scenes.length,
+          captionCueCount: captions.length,
+          analysisState: scenes.length > 0 ? 'scene_detection_available' : 'opening_fallback_only',
+        },
+        safeguards: [
+          'Candidates are editable clip drafts based on available processor scene boundaries.',
+          'No candidate is represented as guaranteed to be the best moment or to produce reach, followers, likes, or views.',
+          'Creator selection and a separate render are required before a new artifact exists.',
+        ],
+      },
+    });
+  });
+
   app.get('/adaptations/:variantId', async (c: any) => {
     const actor = c.get('user');
     const variantId = c.req.param('variantId');
@@ -319,7 +372,14 @@ export function createGrowthRoutes() {
         caption: true,
         minioObjectKey: true,
         generationParams: true,
-        video: { select: { id: true, workspaceId: true, durationSeconds: true } },
+        video: {
+          select: {
+            id: true,
+            workspaceId: true,
+            durationSeconds: true,
+            variants: { select: { generationParams: true }, orderBy: { createdAt: 'asc' } },
+          },
+        },
       },
     });
     if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
@@ -333,9 +393,28 @@ export function createGrowthRoutes() {
       headline: variant.caption,
     });
 
+    let resolvedEdit = edit;
+    if (edit.clipCandidateId) {
+      const { scenes, captions } = extractClipAnalysis(variant.video.variants);
+      const candidates = createClipCandidates({
+        durationSeconds: variant.video.durationSeconds,
+        preferredDurationSeconds: existingRecipe.sourceRange.endSeconds - existingRecipe.sourceRange.startSeconds,
+        scenes,
+        captions,
+      });
+      const candidate = candidates.find((item) => item.id === edit.clipCandidateId);
+      if (!candidate) {
+        throw new HTTPException(422, { message: 'The selected clip candidate is no longer valid for this source and platform recipe.' });
+      }
+      resolvedEdit = {
+        ...edit,
+        sourceRange: { startSeconds: candidate.startSeconds, endSeconds: candidate.endSeconds },
+      };
+    }
+
     let recipe;
     try {
-      recipe = applyManualAdaptationEdit(existingRecipe, edit);
+      recipe = applyManualAdaptationEdit(existingRecipe, resolvedEdit);
     } catch (error) {
       throw new HTTPException(422, { message: error instanceof Error ? error.message : 'The requested media edit is invalid' });
     }
@@ -357,6 +436,7 @@ export function createGrowthRoutes() {
           renderingBoundary: 'creator_recipe_render_required',
           lastEditedBy: actor.id,
           lastEditedAt: new Date().toISOString(),
+          selectedClipCandidateId: edit.clipCandidateId ?? null,
         },
       },
       select: { id: true, status: true, generationParams: true },

@@ -196,3 +196,14 @@ The creator recipe renderer now uses focal composition when `smart_crop` or `sma
 Safe-zone guides are now treated as editor metadata. They can be requested in the edit specification, but source-processing and recipe-render delivery artifacts pass `safeZone: false`; white guide boxes are not burned into exported creator media. Renderer state records the requested guide and the fact that it was not rendered into the deliverable.
 
 This checkpoint passed API adaptation/Growth contracts, API type-check/build, web lint/type-check/Vitest/production build, web and API production dependency audits with zero vulnerabilities, intelligence checks, processor syntax checks, `test:render-filter`, and repository diff hygiene. Actual FFmpeg rendering with a real uploaded source remains deployment-gated and is not represented as runtime-tested in this record.
+
+
+## Transparent scene-aware clip-candidate checkpoint
+
+The processor already persists scene boundaries and caption-cue metadata in generated variant parameters when source analysis is available. The API now reuses that existing evidence through `GET /api/v1/growth/clip-candidates/:videoId?platform=<platform>`, after workspace authorization, to produce at most three deterministic platform-length drafts. The endpoint labels its evidence state as either `scene_detection_available` or `opening_fallback_only`.
+
+Scene-aware candidates are anchored at persisted scene starts and constrained to the automatic platform target duration. Each response discloses source, covered processor scene numbers, caption-cue count, rationale, and safeguards. The response explicitly states that a scene boundary does not identify the best-performing moment or predict reach, followers, likes, or views. When usable scene data is unavailable, the API provides one editable opening-range fallback rather than fabricating analysis.
+
+Growth Studio now shows these drafts in the Advanced Edit Lab. Selecting one pre-fills the trim inputs and marks it as the range for the next render. On save, the browser sends the opaque candidate ID, but the server independently recomputes candidates from persisted source evidence, rejects stale or forged IDs, writes `selectedClipCandidateId` to the variant metadata, preserves `scene_candidate` recipe provenance, and queues the same non-destructive private renderer. Direct manual ranges remain available and retain `creator_custom` provenance.
+
+The `test:clip-candidates` quality gate proves scene anchoring, candidate duration limits, caption counts, fallback honesty, evidence extraction, and scene-candidate recipe provenance. The full web/API/intelligence/processor validation and production dependency audits passed. Runtime scene detection, rendering, and review of a real uploaded source remain deployment-gated.
