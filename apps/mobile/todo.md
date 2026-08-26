@@ -91,4 +91,6 @@
 - [x] Add a read-only owner operational health view without creator media or infrastructure-secret exposure.
 - [ ] Complete an autonomous sweep of remaining code-addressable release gaps and isolate external-only certification gates.
 - [x] Replace unsupported static developer-console creators, growth, reliability, and invitation claims with authorized data or truthful unavailable states.
+- [x] Verify that replacing mock console claims did not remove any real creator workflow capability.
+- [x] Add regression coverage that distinguishes real creator controls from unsupported static demonstration claims.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
