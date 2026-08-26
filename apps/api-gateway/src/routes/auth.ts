@@ -45,6 +45,12 @@ const workspaceSelectionSchema = z.object({
   workspaceId: z.string().uuid(),
 });
 
+const workspaceActivityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(25).default(8),
+});
+
+const creatorActivityActions = ['workspace_selected', 'creator_publish_intent_created', 'creator_publish_intent_approved'] as const;
+
 const refreshTokenLifetimeSeconds = 60 * 60 * 24 * 30;
 
 function createRefreshToken(userId: string, secret: string) {
@@ -359,6 +365,22 @@ export function createAuthRoutes() {
       },
     });
     return c.json({ success: true, data: { workspaceId } });
+  });
+
+  app.get('/workspace-activity', zValidator('query', workspaceActivityQuerySchema), async (c: any) => {
+    const user = c.get('user');
+    const workspaceId = c.req.header('x-workspace-id');
+    if (!workspaceId) throw new HTTPException(400, { message: 'Select an authorized workspace before viewing activity.' });
+    const membership = await prisma.workspaceMember.findFirst({ where: { userId: user.id, workspaceId }, select: { id: true } });
+    if (!membership) throw new HTTPException(403, { message: 'This workspace is not authorized for the current session.' });
+    const { limit } = c.req.valid('query');
+    const events = await prisma.auditLog.findMany({
+      where: { workspaceId, action: { in: [...creatorActivityActions] } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { action: true, resourceType: true, createdAt: true },
+    });
+    return c.json({ data: { events } });
   });
 
   app.post('/verify-email', async () => {

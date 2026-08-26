@@ -5,6 +5,7 @@ import { assertAuthorizedWorkspace, listAuthorizedWorkspaces, parseNativeAuthDat
 import { parseSourceAnalytics } from "@/lib/analytics-contract";
 import { parseProcessingDiagnostic } from "@/lib/processing-contract";
 import { parseWorkspaceSources } from "@/lib/source-sync-contract";
+import { parseWorkspaceActivity } from "@/lib/workspace-activity-contract";
 import { clearSecureSession, getSecureSession, saveSecureSession } from "@/lib/secure-session";
 
 function apiBaseUrl() {
@@ -114,6 +115,12 @@ export async function getWorkspaceSources() {
   const response = await viralBoostRequest("/api/v1/videos?limit=50&sortBy=updatedAt&sortOrder=desc");
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseWorkspaceSources(await response.json());
+}
+
+export async function getWorkspaceActivity() {
+  const response = await viralBoostRequest("/api/v1/auth/workspace-activity?limit=5");
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseWorkspaceActivity(await response.json());
 }
 
 export async function prepareAdaptationPlan(videoId: string) {

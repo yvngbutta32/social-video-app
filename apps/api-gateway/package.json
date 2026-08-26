@@ -28,7 +28,8 @@
     "test:operational-guards": "tsx scripts/verify-operational-guards.ts",
     "test:multipart-cleanup": "tsx scripts/verify-multipart-cleanup.ts",
     "test:workspace-resolution": "tsx scripts/verify-workspace-resolution.ts",
-    "test:workspace-selection-audit": "tsx scripts/verify-workspace-selection-audit.ts"
+    "test:workspace-selection-audit": "tsx scripts/verify-workspace-selection-audit.ts",
+    "test:workspace-activity": "tsx scripts/verify-workspace-activity.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

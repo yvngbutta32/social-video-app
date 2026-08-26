@@ -81,4 +81,7 @@
 - [x] Verify existing audit persistence and authorized event boundaries for workspace-selection accountability.
 - [x] Record creator-authorized workspace-selection events without exposing workspace data across members.
 - [ ] Validate workspace-selection audit events against a deployed audit-log database before release.
+- [x] Verify privacy-safe workspace activity event fields and authorized retrieval boundaries.
+- [x] Add a read-only native workspace activity timeline using redacted authorized audit events.
+- [ ] Validate workspace activity timeline records against a deployed audit-log database before release.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
