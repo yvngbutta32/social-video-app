@@ -4,8 +4,8 @@ import { checkOperationalReadiness, FixedWindowRateLimiter, RedisFixedWindowRate
 import api from '../src/index.js';
 
 async function main() {
-  const healthy = await checkOperationalReadiness({ database: async () => true, redis: async () => 'PONG' }, 25);
-  assert.deepEqual(healthy, { status: 'ready', dependencies: { database: 'ready', redis: 'ready' } });
+  const healthy = await checkOperationalReadiness({ database: async () => true, redis: async () => 'PONG', storage: async () => true }, 25);
+  assert.deepEqual(healthy, { status: 'ready', dependencies: { database: 'ready', redis: 'ready', storage: 'ready' } });
 
   const degraded = await checkOperationalReadiness({ database: async () => { throw new Error('offline'); }, redis: async () => new Promise(() => undefined) }, 5);
   assert.equal(degraded.status, 'not_ready');
@@ -37,6 +37,7 @@ async function main() {
   assert(['ready', 'not_ready'].includes(readinessPayload.status || ''));
   assert.equal(typeof readinessPayload.dependencies?.database, 'string');
   assert.equal(typeof readinessPayload.dependencies?.redis, 'string');
+  assert.equal(typeof readinessPayload.dependencies?.storage, 'string');
   assert.equal('error' in readinessPayload, false, 'Readiness must not return raw dependency errors.');
 
   let rateLimited = false;
@@ -52,6 +53,7 @@ async function main() {
   assert.match(index, /FixedWindowRateLimiter/);
   assert.match(index, /RedisFixedWindowRateLimiter/);
   assert.match(index, /rateLimitCacheUnavailableUntil/);
+  assert.match(index, /probePrivateSourceStorage/);
   assert.match(index, /webhooks\/platform/);
   console.log('Operational guard verification passed.');
 }

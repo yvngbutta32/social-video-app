@@ -36,6 +36,12 @@ function client(endpoint?: string) {
   });
 }
 
+export async function probePrivateSourceStorage() {
+  const config = storageConfig();
+  if (!config.accessKeyId || !config.secretAccessKey) throw new Error('Private source storage credentials are not configured');
+  await client().send(new HeadBucketCommand({ Bucket: config.bucket }));
+}
+
 async function ensureBucket(s3: S3Client, bucket: string) {
   try {
     await s3.send(new HeadBucketCommand({ Bucket: bucket }));

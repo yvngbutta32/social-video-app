@@ -22,6 +22,7 @@ import { createPublishingRoutes } from './routes/publishing.js';
 import { createInternalConnectorRoutes } from './routes/internal-connectors.js';
 import { checkOperationalReadiness, FixedWindowRateLimiter, RedisFixedWindowRateLimiter, type RateLimitResult, trustedClientKey } from './lib/operational-guards.js';
 import { prisma } from './lib/prisma.js';
+import { probePrivateSourceStorage } from './lib/source-storage.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
 
@@ -130,6 +131,7 @@ app.get('/ready', async (c) => {
   const readiness = await checkOperationalReadiness({
     database: () => prisma.$queryRawUnsafe('SELECT 1'),
     redis: probeRedis,
+    storage: probePrivateSourceStorage,
   }, readinessTimeoutMs);
   return c.json({ ...readiness, timestamp: new Date().toISOString() }, readiness.status === 'ready' ? 200 : 503);
 });

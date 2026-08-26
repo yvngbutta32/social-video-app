@@ -84,4 +84,7 @@
 - [x] Verify privacy-safe workspace activity event fields and authorized retrieval boundaries.
 - [x] Add a read-only native workspace activity timeline using redacted authorized audit events.
 - [ ] Validate workspace activity timeline records against a deployed audit-log database before release.
+- [x] Verify private object-storage configuration and safe readiness-reporting boundaries.
+- [x] Add a bounded private-storage readiness check to the deployment health contract.
+- [ ] Validate storage readiness against deployed private object storage before release.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
