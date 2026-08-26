@@ -13,7 +13,8 @@
     "test:growth": "tsx scripts/verify-growth-plan.ts",
     "test:auth-boundary": "tsx scripts/verify-auth-boundary.ts",
     "test:truthful-boundaries": "tsx scripts/verify-truthful-boundaries.ts",
-    "test:analytics-integrity": "tsx scripts/verify-analytics-integrity.ts"
+    "test:analytics-integrity": "tsx scripts/verify-analytics-integrity.ts",
+    "test:adaptations": "tsx scripts/verify-adaptation-recipes.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

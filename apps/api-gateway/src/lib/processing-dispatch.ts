@@ -43,6 +43,37 @@ export async function enqueueVideoProcessing(videoId: string) {
   return { jobId: job.id || deterministicId, status: 'queued' as const };
 }
 
+export function variantRenderJobId(variantId: string, revision: number) {
+  return `variant-render:${variantId}:r${revision}`;
+}
+
+export async function enqueueVariantRendering(variantId: string, revision: number) {
+  const processingQueue = getQueue();
+  const deterministicId = variantRenderJobId(variantId, revision);
+  const existing = await processingQueue.getJob(deterministicId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'waiting' || state === 'active' || state === 'delayed' || state === 'prioritized') {
+      return { jobId: deterministicId, status: 'already_queued' as const };
+    }
+    if (state === 'failed') {
+      await existing.retry('failed');
+      return { jobId: deterministicId, status: 'retried' as const };
+    }
+    if (state === 'completed') {
+      await existing.remove();
+    }
+  }
+  const job = await processingQueue.add('render-variant', { variantId, revision }, {
+    jobId: deterministicId,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: { age: 86400, count: 1000 },
+    removeOnFail: { age: 604800, count: 5000 },
+  });
+  return { jobId: job.id || deterministicId, status: 'queued' as const };
+}
+
 export async function closeProcessingDispatcher() {
   await queue?.close();
   await redis?.quit();

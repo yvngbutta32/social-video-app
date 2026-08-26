@@ -11,12 +11,20 @@ import {
   type GrowthObjective,
   type GrowthPlatform,
 } from '../lib/growth-plan.js';
-import { requireWorkspaceAccess } from '../lib/pilot-access.js';
+import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 import { evaluateLearningSignal } from '../lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
 import { buildExperimentScorecard } from '../lib/experiment-scorecard.js';
 import { buildReachPlan } from '../lib/reach-plan.js';
 import { metricFreshness } from '../lib/metric-ingestion.js';
+import { enqueueVariantRendering } from '../lib/processing-dispatch.js';
+import {
+  adaptationRecipeSchema,
+  applyManualAdaptationEdit,
+  createAutomaticAdaptationRecipe,
+  manualAdaptationEditSchema,
+  parseAdaptationRecipe,
+} from '../lib/adaptation-recipe.js';
 
 const sourceSchema = z.object({
   videoId: z.string().uuid(),
@@ -166,9 +174,21 @@ export function createGrowthRoutes() {
       const existing = existingPlanned || existingRendered;
       if (existing) {
         const priorParams = (existing.generationParams as Record<string, unknown> | null) ?? {};
-        return tx.videoVariant.update({ where: { id: existing.id }, data: { variantType: experiment.variantType, hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { ...priorParams, planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: existing.status === 'ready' ? 'processor_variant_ready' : 'processor_variant_render_required' } }, select: { id: true, status: true } });
+        const adaptationRecipe = parseAdaptationRecipe(priorParams.adaptationRecipe) ?? createAutomaticAdaptationRecipe({
+          platform: experiment.platform,
+          sourceVideoId: video.id,
+          durationSeconds: video.durationSeconds,
+          headline: experiment.hook,
+        });
+        return tx.videoVariant.update({ where: { id: existing.id }, data: { variantType: experiment.variantType, hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { ...priorParams, planKey, objective: input.objective, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: existing.status === 'ready' ? 'processor_variant_ready' : 'processor_variant_render_required' } }, select: { id: true, status: true } });
       }
-      return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
+      const adaptationRecipe = createAutomaticAdaptationRecipe({
+        platform: experiment.platform,
+        sourceVideoId: video.id,
+        durationSeconds: video.durationSeconds,
+        headline: experiment.hook,
+      });
+      return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
     })));
     const experimentsWithVariants = experiments.map((experiment, index) => {
       const destination = accounts.find((account) => account.platform === experiment.platform) ?? null;
@@ -191,6 +211,146 @@ export function createGrowthRoutes() {
           'Approved publishing requires a rendered variant, separate creator action, and active connected account.',
           'Planning creates a pending variant record; it does not claim that media rendering has completed.',
         ],
+      },
+    });
+  });
+
+  app.get('/adaptations/:variantId', async (c: any) => {
+    const actor = c.get('user');
+    const variantId = c.req.param('variantId');
+    const variant = await prisma.videoVariant.findUnique({
+      where: { id: variantId },
+      select: {
+        id: true,
+        platform: true,
+        status: true,
+        minioObjectKey: true,
+        thumbnailObjectKey: true,
+        completedAt: true,
+        errorMessage: true,
+        generationParams: true,
+        video: { select: { id: true, workspaceId: true, durationSeconds: true } },
+      },
+    });
+    if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
+    await requireWorkspaceAccess(actor, variant.video.workspaceId);
+
+    const params = (variant.generationParams as Record<string, unknown> | null) ?? {};
+    const recipe = adaptationRecipeSchema.parse(
+      parseAdaptationRecipe(params.adaptationRecipe) ?? createAutomaticAdaptationRecipe({
+        platform: variant.platform as GrowthPlatform,
+        sourceVideoId: variant.video.id,
+        durationSeconds: variant.video.durationSeconds,
+      })
+    );
+
+    return c.json({
+      data: {
+        variantId: variant.id,
+        platform: variant.platform,
+        status: variant.status,
+        recipe,
+        artifact: variant.minioObjectKey
+          ? {
+            objectKey: variant.minioObjectKey,
+            thumbnailObjectKey: variant.thumbnailObjectKey,
+            completedAt: variant.completedAt,
+            state: variant.status === 'ready' ? 'current_recipe_rendered' : 'previous_recipe_artifact_available',
+          }
+          : null,
+        renderState: params.renderingBoundary ?? 'processor_variant_render_required',
+        errorMessage: variant.errorMessage,
+        safeguards: [
+          'The original source remains unchanged; edits are stored as a non-destructive recipe.',
+          'A saved recipe is not a rendered artifact until the processor completes a new render.',
+          'The developer oversight role can view creator artifacts but cannot modify this recipe.',
+        ],
+      },
+    });
+  });
+
+  app.put('/adaptations/:variantId', zValidator('json', manualAdaptationEditSchema), async (c: any) => {
+    const actor = c.get('user');
+    const variantId = c.req.param('variantId');
+    const edit = c.req.valid('json');
+    const variant = await prisma.videoVariant.findUnique({
+      where: { id: variantId },
+      select: {
+        id: true,
+        platform: true,
+        caption: true,
+        minioObjectKey: true,
+        generationParams: true,
+        video: { select: { id: true, workspaceId: true, durationSeconds: true } },
+      },
+    });
+    if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
+    await requireCreatorWorkspaceAccess(actor, variant.video.workspaceId);
+
+    const priorParams = (variant.generationParams as Record<string, unknown> | null) ?? {};
+    const existingRecipe = parseAdaptationRecipe(priorParams.adaptationRecipe) ?? createAutomaticAdaptationRecipe({
+      platform: variant.platform as GrowthPlatform,
+      sourceVideoId: variant.video.id,
+      durationSeconds: variant.video.durationSeconds,
+      headline: variant.caption,
+    });
+
+    let recipe;
+    try {
+      recipe = applyManualAdaptationEdit(existingRecipe, edit);
+    } catch (error) {
+      throw new HTTPException(422, { message: error instanceof Error ? error.message : 'The requested media edit is invalid' });
+    }
+    if (variant.video.durationSeconds !== null && recipe.sourceRange.endSeconds > variant.video.durationSeconds) {
+      throw new HTTPException(422, { message: 'The selected clip range exceeds the source media duration' });
+    }
+
+    const updated = await prisma.videoVariant.update({
+      where: { id: variant.id },
+      data: {
+        status: 'pending',
+        completedAt: null,
+        errorMessage: null,
+        caption: recipe.headline ?? variant.caption,
+        generationParams: {
+          ...priorParams,
+          adaptationRecipe: recipe,
+          previousArtifactObjectKey: variant.minioObjectKey,
+          renderingBoundary: 'creator_recipe_render_required',
+          lastEditedBy: actor.id,
+          lastEditedAt: new Date().toISOString(),
+        },
+      },
+      select: { id: true, status: true, generationParams: true },
+    });
+
+    let renderJob;
+    try {
+      renderJob = await enqueueVariantRendering(updated.id, recipe.provenance.revision);
+    } catch (error) {
+      await prisma.videoVariant.update({
+        where: { id: updated.id },
+        data: {
+          status: 'failed',
+          errorMessage: 'The edit was saved, but the rendering job could not be queued. Retry after the processing service is available.',
+          generationParams: {
+            ...((updated.generationParams as Record<string, unknown> | null) ?? {}),
+            renderingBoundary: 'creator_recipe_render_dispatch_failed',
+            renderDispatchFailedAt: new Date().toISOString(),
+          },
+        },
+      });
+      throw new HTTPException(503, { message: 'The edit was saved but rendering is temporarily unavailable. Retry when the processing service is available.' });
+    }
+
+    return c.json({
+      data: {
+        variantId: updated.id,
+        status: updated.status,
+        recipe,
+        renderState: 'creator_recipe_render_queued',
+        renderJob,
+        nextStep: 'The non-destructive edit is saved and queued for rendering. Review the updated artifact after the processor reports it ready, then decide whether to approve it for publishing.',
       },
     });
   });

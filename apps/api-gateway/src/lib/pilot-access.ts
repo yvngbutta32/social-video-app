@@ -61,6 +61,14 @@ export async function requireWorkspaceAccess(actor: PilotActor, workspaceId: str
   return { workspaceId: membership.workspaceId, role: membership.role, oversight: false };
 }
 
+export async function requireCreatorWorkspaceAccess(actor: PilotActor, workspaceId: string) {
+  const access = await requireWorkspaceAccess(actor, workspaceId);
+  if (access.oversight) {
+    throw new HTTPException(403, { message: 'Creator workspace access is required to modify media recipes' });
+  }
+  return access;
+}
+
 export async function assertPublishingAllowed(workspaceId: string) {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },

@@ -3,9 +3,10 @@ import { Readable, PassThrough } from 'stream';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { downloadFile, uploadMultipart, uploadPart, completeMultipart, abortMultipart, fileExists } from './minio.js';
-import { findVideoById, updateVideoStatus, updateVideoProgress, createVideoVariant } from './db.js';
+import { findVideoById, updateVideoStatus, updateVideoProgress, createVideoVariant, findVariantForRender, updateVariantRenderState } from './db.js';
 import { promisify } from 'util';
 import fs from 'fs/promises';
+import { createWriteStream } from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 import axios from 'axios';
@@ -419,8 +420,10 @@ async function probeVideo(inputPath) {
 async function transcodeVideo(inputPath, outputPath, spec, options = {}, progressCallback) {
   return new Promise((resolve, reject) => {
     const filterComplex = buildFilterComplex(spec, options.inputWidth, options.inputHeight, options);
-    
-    const command = ffmpeg(inputPath)
+    const command = ffmpeg(inputPath);
+    if (Number.isFinite(options.startSeconds) && options.startSeconds > 0) command.setStartTime(options.startSeconds);
+    if (Number.isFinite(options.durationSeconds) && options.durationSeconds > 0) command.duration(options.durationSeconds);
+    command
       .videoCodec(spec.codec)
       .audioCodec(spec.audioCodec)
       .fps(spec.fps)
@@ -565,6 +568,175 @@ async function generateHookVariants(inputPath, spec, hookCount = 3) {
   }
   
   return variants;
+}
+
+function processorPlatformKey(platform) {
+  return {
+    instagram: 'instagram_reels',
+    youtube: 'youtube_shorts',
+    facebook: 'facebook_reels',
+    x: 'twitter',
+  }[platform] || platform;
+}
+
+function readRecipe(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const recipe = value;
+  if (recipe.version !== 1 || !recipe.sourceRange || !recipe.output || !recipe.composition || !recipe.audio) return null;
+  const { startSeconds, endSeconds } = recipe.sourceRange;
+  if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds) return null;
+  return recipe;
+}
+
+async function renderRecipeVariant(inputPath, outputPath, spec, recipe) {
+  const probe = await probeVideo(inputPath);
+  const videoStream = probe.streams.find((stream) => stream.codec_type === 'video');
+  const inputWidth = videoStream?.width || 1920;
+  const inputHeight = videoStream?.height || 1080;
+  const requestedFocus = recipe.composition.focalPoint;
+  const focusPoint = requestedFocus || ((recipe.composition.mode === 'smart_crop' || recipe.composition.mode === 'smart_fill')
+    ? await detectFocusPoints(inputPath)
+    : { x: 0.5, y: 0.5 });
+
+  await transcodeVideo(inputPath, outputPath, spec, {
+    mode: recipe.composition.mode,
+    safeZone: false,
+    addCaptions: Boolean(recipe.headline),
+    captionText: recipe.headline || '',
+    inputWidth,
+    inputHeight,
+    focusPoint,
+    startSeconds: recipe.sourceRange.startSeconds,
+    durationSeconds: recipe.sourceRange.endSeconds - recipe.sourceRange.startSeconds,
+  });
+}
+
+export async function processVariantRenderJob(job, deps) {
+  const { variantId } = job.data;
+  const childLogger = logger.child({ jobId: job.id, variantId });
+  let inputPath = null;
+  let renderedPath = null;
+  let normalizedPath = null;
+
+  try {
+    const variant = await findVariantForRender(variantId);
+    if (!variant) throw new Error(`Variant ${variantId} not found`);
+    const generationParams = typeof variant.generation_params === 'string'
+      ? JSON.parse(variant.generation_params)
+      : (variant.generation_params || {});
+    const recipe = readRecipe(generationParams.adaptationRecipe);
+    if (!recipe) throw new Error('Variant does not contain a valid adaptation recipe');
+
+    await updateVariantRenderState(variantId, {
+      status: 'processing',
+      generationParams: {
+        renderingBoundary: 'processor_recipe_rendering',
+        renderStartedAt: new Date().toISOString(),
+        renderRecipeRevision: recipe.provenance?.revision || 1,
+      },
+    });
+
+    const sourceStream = await downloadFile(variant.source_object_key, variant.source_bucket);
+    if (!sourceStream) throw new Error('Unable to download the original creator source for rendering');
+    inputPath = `/tmp/recipe_source_${variant.video_id}_${variantId}_${Date.now()}.mp4`;
+    await streamToFile(sourceStream, inputPath);
+
+    const spec = {
+      ...getPlatformSpec(processorPlatformKey(variant.platform)),
+      platform: variant.platform,
+      width: recipe.output.width,
+      height: recipe.output.height,
+      fps: recipe.output.fps,
+      maxDuration: recipe.output.maxDurationSeconds,
+    };
+    renderedPath = `/tmp/recipe_render_${variantId}_${Date.now()}.mp4`;
+    await renderRecipeVariant(inputPath, renderedPath, spec, recipe);
+
+    normalizedPath = `/tmp/recipe_normalized_${variantId}_${Date.now()}.mp4`;
+    if (recipe.audio.normalize) {
+      await normalizeAudio(renderedPath, normalizedPath, spec);
+    } else {
+      await fs.copyFile(renderedPath, normalizedPath);
+    }
+
+    const validation = await validateVariant(normalizedPath, spec);
+    if (!validation.valid) throw new Error(`Rendered adaptation failed validation: ${validation.issues.join('; ')}`);
+
+    const revision = recipe.provenance?.revision || 1;
+    const objectKey = `variants/${variant.video_id}/recipes/${variantId}_r${revision}.mp4`;
+    if (!await fileExists(objectKey)) {
+      const uploadId = await uploadMultipart(objectKey, 'video/mp4', {
+        videoId: variant.video_id,
+        variantId,
+        platform: variant.platform,
+        recipeRevision: String(revision),
+      });
+      try {
+        const bytes = await fs.readFile(normalizedPath);
+        const partSize = 5 * 1024 * 1024;
+        const parts = [];
+        let partNumber = 1;
+        for (let offset = 0; offset < bytes.length; offset += partSize) {
+          parts.push(await uploadPart(objectKey, uploadId, partNumber, bytes.slice(offset, offset + partSize)));
+          partNumber += 1;
+        }
+        await completeMultipart(objectKey, uploadId, parts);
+      } catch (error) {
+        await abortMultipart(objectKey, uploadId);
+        throw error;
+      }
+    }
+
+    const thumbnailPath = `/tmp/recipe_thumb_${variantId}_${Date.now()}.jpg`;
+    await generateThumbnail(normalizedPath, spec, thumbnailPath);
+    const thumbnailKey = `thumbnails/${variant.video_id}/recipes/${variantId}_r${revision}.jpg`;
+    if (!await fileExists(thumbnailKey)) {
+      const thumbnailUploadId = await uploadMultipart(thumbnailKey, 'image/jpeg', { videoId: variant.video_id, variantId, platform: variant.platform });
+      try {
+        const thumbnailPart = await uploadPart(thumbnailKey, thumbnailUploadId, 1, await fs.readFile(thumbnailPath));
+        await completeMultipart(thumbnailKey, thumbnailUploadId, [thumbnailPart]);
+      } catch (error) {
+        await abortMultipart(thumbnailKey, thumbnailUploadId);
+        throw error;
+      }
+    }
+
+    const stats = await fs.stat(normalizedPath);
+    const completed = await updateVariantRenderState(variantId, {
+      status: 'ready',
+      objectKey,
+      thumbnailKey,
+      durationSeconds: validation.metadata.duration,
+      width: validation.metadata.width,
+      height: validation.metadata.height,
+      fileSizeBytes: stats.size,
+      generationParams: {
+        renderingBoundary: 'processor_recipe_rendered',
+        renderedAt: new Date().toISOString(),
+        renderRecipeRevision: revision,
+        renderValidation: validation,
+        appliedRecipe: {
+          sourceRange: recipe.sourceRange,
+          composition: recipe.composition,
+          headlineOverlay: Boolean(recipe.headline),
+          timedCaptionsRendered: false,
+          audioNormalized: Boolean(recipe.audio.normalize),
+        },
+      },
+    });
+    childLogger.info({ objectKey, thumbnailKey, revision }, 'Creator adaptation recipe rendered');
+    return { success: true, variantId, objectKey, thumbnailKey, revision, validation, completedAt: completed?.completed_at };
+  } catch (error) {
+    childLogger.error({ err: error }, 'Creator adaptation recipe render failed');
+    await updateVariantRenderState(variantId, {
+      status: 'failed',
+      errorMessage: error instanceof Error ? error.message : 'Unknown adaptation render failure',
+      generationParams: { renderingBoundary: 'processor_recipe_render_failed', renderFailedAt: new Date().toISOString() },
+    }).catch((stateError) => childLogger.error({ err: stateError }, 'Failed to persist variant render failure state'));
+    throw error;
+  } finally {
+    await Promise.all([inputPath, renderedPath, normalizedPath].filter(Boolean).map((filePath) => fs.unlink(filePath).catch(() => {})));
+  }
 }
 
 export async function processVideoJob(job, deps) {
@@ -712,14 +884,15 @@ export async function processVideoJob(job, deps) {
         const fileBuffer = await fs.readFile(normalizedPath);
         const partSize = 5 * 1024 * 1024; // 5MB parts
         let partNumber = 1;
+        const uploadedParts = [];
         
         for (let i = 0; i < fileBuffer.length; i += partSize) {
           const chunk = fileBuffer.slice(i, i + partSize);
-          await uploadPart(variantS3Key, uploadId, partNumber, chunk);
+          uploadedParts.push(await uploadPart(variantS3Key, uploadId, partNumber, chunk));
           partNumber++;
         }
         
-        const etag = await completeMultipart(variantS3Key, uploadId, partNumber - 1);
+        const etag = await completeMultipart(variantS3Key, uploadId, uploadedParts);
         
         // Generate thumbnail
         let thumbnailKey = null;
@@ -727,9 +900,9 @@ export async function processVideoJob(job, deps) {
           const thumbPath = `/tmp/thumb_${videoId}_${platform}_${Date.now()}.jpg`;
           await generateThumbnail(normalizedPath, spec, thumbPath);
           const thumbKey = `thumbnails/${videoId}/${platform}_${videoHash}.jpg`;
-          const thumbUpload = await uploadMultipart(thumbKey, 'image/jpeg', { videoId, platform });
-          await uploadPart(thumbKey, thumbUpload.uploadId, 1, await fs.readFile(thumbPath));
-          await completeMultipart(thumbKey, thumbUpload.uploadId, 1);
+          const thumbUploadId = await uploadMultipart(thumbKey, 'image/jpeg', { videoId, platform });
+          const thumbPart = await uploadPart(thumbKey, thumbUploadId, 1, await fs.readFile(thumbPath));
+          await completeMultipart(thumbKey, thumbUploadId, [thumbPart]);
           thumbnailKey = thumbKey;
           thumbnails.push({ platform, s3Key: thumbKey });
         }
@@ -799,11 +972,11 @@ export async function processVideoJob(job, deps) {
 
 function streamToFile(stream, filePath) {
   return new Promise((resolve, reject) => {
-    const writeStream = fs.createWriteStream(filePath);
+    const writeStream = createWriteStream(filePath);
     stream.pipe(writeStream);
-    stream.on('end', () => resolve(filePath));
     stream.on('error', reject);
     writeStream.on('error', reject);
+    writeStream.on('finish', () => resolve(filePath));
   });
 }
 

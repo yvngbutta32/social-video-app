@@ -74,6 +74,30 @@ export type GrowthPlan = {
   safeguards: string[];
 };
 
+export type AdaptationRecipe = {
+  version: 1;
+  platform: string;
+  mode: 'automatic' | 'manual';
+  sourceRange: { startSeconds: number; endSeconds: number; selectionMethod: string; rationale: string };
+  composition: { mode: 'fit' | 'crop' | 'blur_bg' | 'smart_crop' | 'smart_fill'; focalPoint?: { x: number; y: number }; showSafeZones: boolean };
+  captions: { enabled: boolean; style: 'off' | 'clean' | 'high_contrast' };
+  headline: string | null;
+  audio: { normalize: boolean };
+  output: { aspectRatio: string; width: number; height: number; fps: number; maxDurationSeconds: number };
+  provenance: { sourceVideoId: string; generatedAt: string; revision: number };
+};
+
+export type AdaptationRecord = {
+  variantId: string;
+  platform: string;
+  status: string;
+  recipe: AdaptationRecipe;
+  artifact: { objectKey: string; thumbnailObjectKey: string | null; completedAt: string | null; state: 'current_recipe_rendered' | 'previous_recipe_artifact_available' } | null;
+  renderState: string;
+  errorMessage: string | null;
+  safeguards: string[];
+};
+
 export type PublishingIntentSummary = {
   id: string;
   status: string;

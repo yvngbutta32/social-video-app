@@ -138,6 +138,49 @@ export async function createVideoVariant(videoId, platform, s3Key, metadata) {
   return result.rows[0];
 }
 
+export async function findVariantForRender(variantId) {
+  const result = await query(
+    `SELECT vv.*, v.workspace_id, v.minio_object_key AS source_object_key, v.minio_bucket AS source_bucket,
+            v.duration_seconds AS source_duration_seconds
+       FROM video_variants vv
+       JOIN videos v ON v.id = vv.video_id
+      WHERE vv.id = $1`,
+    [variantId]
+  );
+  return result.rows[0];
+}
+
+export async function updateVariantRenderState(variantId, state) {
+  const result = await query(
+    `UPDATE video_variants
+        SET status = $2,
+            minio_object_key = COALESCE($3, minio_object_key),
+            thumbnail_object_key = COALESCE($4, thumbnail_object_key),
+            duration_seconds = COALESCE($5, duration_seconds),
+            width = COALESCE($6, width),
+            height = COALESCE($7, height),
+            file_size_bytes = COALESCE($8, file_size_bytes),
+            error_message = $9,
+            completed_at = CASE WHEN $2 = 'ready' THEN NOW() ELSE NULL END,
+            generation_params = COALESCE(generation_params, '{}'::jsonb) || $10::jsonb
+      WHERE id = $1
+      RETURNING *`,
+    [
+      variantId,
+      state.status,
+      state.objectKey || null,
+      state.thumbnailKey || null,
+      state.durationSeconds ?? null,
+      state.width ?? null,
+      state.height ?? null,
+      state.fileSizeBytes ?? null,
+      state.errorMessage || null,
+      JSON.stringify(state.generationParams || {}),
+    ]
+  );
+  return result.rows[0];
+}
+
 export async function createScheduledPost(workspaceId, variantId, socialAccountId, scheduledAt, abTestId = null) {
   const result = await query(
     `INSERT INTO scheduled_posts (workspace_id, variant_id, social_account_id, scheduled_at, status, ab_test_id)

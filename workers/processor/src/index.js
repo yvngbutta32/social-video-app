@@ -2,7 +2,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { pgPool } from './db.js';
 import { healthCheck, readinessCheck, livenessCheck } from './health.js';
-import { processVideoJob } from './processor.js';
+import { processVideoJob, processVariantRenderJob } from './processor.js';
 import { processPublishJob } from './publisher.js';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
@@ -51,7 +51,9 @@ new Worker('video-processing', async (job) => {
   childLogger.info({ data: job.data }, 'Processing video job');
   
   try {
-    const result = await processVideoJob(job, deps);
+    const result = job.name === 'render-variant'
+      ? await processVariantRenderJob(job, deps)
+      : await processVideoJob(job, deps);
     return result;
   } catch (error) {
     childLogger.error({ err: error }, 'Video processing job error');
