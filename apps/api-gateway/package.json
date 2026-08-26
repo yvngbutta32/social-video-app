@@ -18,7 +18,10 @@
     "test:adaptations": "tsx scripts/verify-adaptation-recipes.ts",
     "test:artifact-preview": "tsx scripts/verify-artifact-preview.ts",
     "test:clip-candidates": "tsx scripts/verify-clip-candidates.ts",
-    "test:processing-diagnostics": "tsx scripts/verify-processing-diagnostics.ts"
+    "test:processing-diagnostics": "tsx scripts/verify-processing-diagnostics.ts",
+    "test:intelligence-boundary": "tsx scripts/verify-intelligence-boundary.ts",
+    "test:webhook-security": "tsx scripts/verify-webhook-security.ts",
+    "test:cors-workspace-header": "tsx scripts/verify-cors-workspace-header.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",
@@ -42,6 +45,8 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.0",
     "@types/pg": "^8.11.0",
+    "@typescript-eslint/eslint-plugin": "^8.68.0",
+    "@typescript-eslint/parser": "^8.68.0",
     "eslint": "^8.57.0",
     "prisma": "^5.15.0",
     "tsx": "^4.15.0",

@@ -445,7 +445,7 @@ export function createGrowthRoutes() {
     let renderJob;
     try {
       renderJob = await enqueueVariantRendering(updated.id, recipe.provenance.revision);
-    } catch (error) {
+    } catch {
       await prisma.videoVariant.update({
         where: { id: updated.id },
         data: {

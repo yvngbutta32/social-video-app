@@ -1,359 +1,41 @@
-'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { 
-  Zap, 
-  Target, 
-  BarChart3, 
-  Globe, 
-  Brain, 
-  Shield,
-  ArrowRight,
-  CheckCircle,
-  Loader2,
-  Video,
-  Sparkles
-} from 'lucide-react';
+import { ArrowRight, CheckCircle2, FileVideo2, LockKeyhole, ScanSearch, ShieldCheck, Sparkles, Waypoints } from 'lucide-react';
 
-const features = [
-  {
-    icon: Zap,
-    title: 'Creator-Controlled Distribution',
-    description: 'One source becomes a transparent, creator-approved plan for authorized platform destinations.',
-  },
-  {
-    icon: Brain,
-    title: 'Private Source Intelligence',
-    description: 'Self-hosted analysis identifies durable hooks, proof, and creative variables worth testing.',
-  },
-  {
-    icon: Target,
-    title: 'Controlled Experiments',
-    description: 'Platform-native variants test a limited set of creative decisions and preserve creator approval.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Evidence-Based Learning',
-    description: 'Creator-specific baselines and cautious scorecards distinguish directional signals from decision-ready evidence.',
-  },
-  {
-    icon: Globe,
-    title: 'Official Platform Boundaries',
-    description: 'Publishing and metrics remain creator-authorized official connection workflows, never feed-control claims.',
-  },
-  {
-    icon: Shield,
-    title: 'Self-Owned Foundation',
-    description: 'Private workspaces, self-hosted storage, processing, and local intelligence keep core creator data under platform control.',
-  },
+const workflow = [
+  { title: 'Import a permitted source', detail: 'Bring in media you own or are authorized to adapt. A source remains private until your invited workspace confirms it.', icon: FileVideo2 },
+  { title: 'Review transparent adaptations', detail: 'Compare platform-native draft intent, inspect non-destructive recipe choices, and refine only what you choose.', icon: ScanSearch },
+  { title: 'Approve creator actions', detail: 'Preview artifacts and keep approval separate from any official platform action. Nothing is published by default.', icon: ShieldCheck },
+  { title: 'Learn from measured outcomes', detail: 'Use authorized platform metrics and clear evidence quality to guide the next experiment—never a promised result.', icon: Waypoints },
 ];
 
-const stats = [
-  { value: '6', label: 'Declared destinations' },
-  { value: '100%', label: 'Creator approval required' },
-  { value: 'Private', label: 'Selected-creator access' },
-  { value: 'Evidence', label: 'Before winner claims' },
-];
-
-const platforms = [
-  { name: 'TikTok', color: 'from-pink-500 to-black', icon: Video },
-  { name: 'Instagram Reels', color: 'from-purple-500 via-pink-500 to-orange-500', icon: Sparkles },
-  { name: 'YouTube Shorts', color: 'from-red-600 to-red-400', icon: Video },
-  { name: 'Facebook Reels', color: 'from-blue-600 to-blue-400', icon: Video },
-  { name: 'X (Twitter)', color: 'from-gray-800 to-black', icon: Sparkles },
-  { name: 'LinkedIn', color: 'from-blue-700 to-blue-500', icon: Target },
-  { name: 'Pinterest', color: 'from-red-500 to-pink-500', icon: Sparkles },
+const boundaries = [
+  'Invite-only workspaces with creator-scoped access',
+  'Private source storage and non-destructive edit recipes',
+  'Official, creator-authorized platform boundaries only',
+  'No guaranteed reach, feed placement, fame, or virality',
 ];
 
 export default function HomePage() {
-  const [email, setEmail] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  return <main className="min-h-screen bg-slate-950 text-slate-100">
+    <nav className="border-b border-white/10 bg-slate-950/90 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-white"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-300 text-slate-950"><Sparkles className="h-4 w-4" /></span>ViralBoost Creator</Link>
+        <div className="flex items-center gap-4 text-sm"><Link href="/auth/sign-in" className="text-slate-300 transition hover:text-white">Sign in</Link><Link href="/developer" className="rounded-full border border-cyan-300/40 px-3 py-1.5 font-medium text-cyan-100 transition hover:bg-cyan-300/10">Developer view</Link></div>
+      </div>
+    </nav>
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || isSubmitting) return;
-    
-    setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    setSubmitted(true);
-  };
+    <section className="relative overflow-hidden border-b border-white/10">
+      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,_rgba(34,211,238,0.18),_transparent_40%),radial-gradient(circle_at_bottom_left,_rgba(45,212,191,0.12),_transparent_35%)]" />
+      <div className="mx-auto grid max-w-6xl gap-12 px-5 py-20 md:grid-cols-[1.2fr_0.8fr] md:py-28">
+        <div className="max-w-3xl"><p className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100"><LockKeyhole className="h-3.5 w-3.5" /> Invite-only creator workflow</p><h1 className="text-4xl font-semibold tracking-tight text-white md:text-6xl">One source. Clear adaptations. Creator-owned approval.</h1><p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">ViralBoost Creator helps selected creators privately adapt permitted media into platform-native drafts, refine them with transparent controls, review real artifacts, and learn from authorized outcomes.</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/studio" className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-200">Open Creator Studio <ArrowRight className="h-4 w-4" /></Link><Link href="/developer" className="inline-flex items-center gap-2 rounded-xl border border-white/20 px-5 py-3 font-semibold text-white transition hover:bg-white/10">Workspace oversight</Link></div><p className="mt-5 text-sm text-slate-400">Access is granted by invitation. Platform publishing and metric collection remain creator-authorized, official connection workflows.</p></div>
+        <aside className="rounded-3xl border border-cyan-300/20 bg-slate-900/70 p-6 shadow-2xl shadow-cyan-950/30"><p className="text-sm font-medium text-cyan-100">Product boundary</p><h2 className="mt-2 text-2xl font-semibold text-white">Built for evidence, not empty promises.</h2><ul className="mt-6 space-y-4">{boundaries.map((boundary) => <li key={boundary} className="flex gap-3 text-sm leading-6 text-slate-300"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />{boundary}</li>)}</ul></aside>
+      </div>
+    </section>
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl gradient-text">
-            <Zap className="h-6 w-6" />
-            Amplify
-          </Link>
-          <div className="hidden md:flex items-center gap-6">
-            <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Features</Link>
-            <Link href="#platforms" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Platforms</Link>
-            <Link href="#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
-            <Link href="#docs" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Docs</Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/auth/signin" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Sign In</Link>
-            <Link href="/auth/signup">
-              <Button size="sm">Get Started Free</Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <section id="workflow" className="mx-auto max-w-6xl px-5 py-20"><div className="max-w-2xl"><p className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-200">Creator workflow</p><h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">A deliberate path from raw media to the next informed decision.</h2></div><div className="mt-10 grid gap-4 md:grid-cols-2">{workflow.map((step, index) => <article key={step.title} className="rounded-2xl border border-white/10 bg-slate-900/60 p-6"><div className="flex items-center justify-between"><span className="text-sm font-semibold text-cyan-200">0{index + 1}</span><step.icon className="h-5 w-5 text-cyan-300" /></div><h3 className="mt-5 text-xl font-semibold text-white">{step.title}</h3><p className="mt-2 text-sm leading-6 text-slate-300">{step.detail}</p></article>)}</div></section>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 md:py-32">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20 mb-8 text-sm font-medium">
-              <Sparkles className="h-4 w-4" />
-              <span>Private creator growth operating system</span>
-            </div>
-            
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-              Turn one source into
-              <br />
-              <span className="gradient-text">better creator-led experiments.</span>
-            </h1>
-            
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
-              Upload private source content, prepare transparent platform-native adaptations, approve every delivery step, and learn from real creator outcomes.
-            </p>
+    <section className="border-y border-white/10 bg-slate-900/50"><div className="mx-auto max-w-6xl px-5 py-16"><div className="grid gap-8 md:grid-cols-[1fr_auto]"><div><p className="text-sm font-semibold uppercase tracking-[0.16em] text-cyan-200">For selected creators</p><h2 className="mt-3 text-3xl font-semibold text-white">Automatic enough for a first draft. Precise enough for hands-on refinement.</h2><p className="mt-4 max-w-2xl text-slate-300">Beginners can start from a guided adaptation plan. Advanced creators can adjust trims, composition, focal points, captions, headlines, and audio preferences without overwriting the original source.</p></div><Link href="/studio" className="self-center rounded-xl border border-cyan-300/40 px-5 py-3 text-center font-semibold text-cyan-100 transition hover:bg-cyan-300/10">Review your workspace</Link></div></div></section>
 
-            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto mb-16">
-              <div className="flex-1">
-                <Label htmlFor="email" className="sr-only">Email address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email for early access"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isSubmitting || submitted}
-                  className="h-12 text-base"
-                  required
-                />
-              </div>
-              <Button type="submit" size="lg" disabled={isSubmitting || submitted} className="h-12 px-8">
-                {isSubmitting ? (
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                ) : submitted ? (
-                  <CheckCircle className="h-5 w-5 mr-2" />
-                ) : (
-                  <>
-                    Join Waitlist
-                    <ArrowRight className="h-5 w-5 ml-2" />
-                  </>
-                )}
-                {submitted && 'You\'re on the list!'}
-              </Button>
-            </form>
-
-            <p className="text-sm text-muted-foreground">
-              Invite-only • Creator-approved • Self-owned core infrastructure • No virality guarantees
-            </p>
-          </div>
-
-          {/* Stats Bar */}
-          <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="text-3xl md:text-4xl font-bold gradient-text">{stat.value}</div>
-                <div className="text-sm text-muted-foreground mt-1">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Background decorative elements */}
-        <div className="absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-pulse-soft" />
-          <div className="absolute bottom-20 right-10 w-72 h-72 bg-accent/10 rounded-full blur-3xl animate-pulse-soft" style={{ animationDelay: '1s' }} />
-        </div>
-      </section>
-
-      {/* Platforms Section */}
-      <section id="platforms" className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Native Support for Every Platform</h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Each platform has unique algorithm preferences. Amplify optimizes automatically for all of them.
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 max-w-6xl mx-auto">
-            {platforms.map((platform) => (
-              <Link
-                key={platform.name}
-                href="#"
-                className="group relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br"
-                style={{ background: platform.color }}
-              >
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors duration-300 flex flex-col items-center justify-center p-4">
-                  <platform.icon className="h-10 w-10 text-white mb-2 group-hover:scale-110 transition-transform" />
-                  <span className="text-white font-semibold text-center">{platform.name}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Built for Amplification, Not Just Posting</h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Every feature is designed to maximize reach, engagement, and conversion — not just save time.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {features.map((feature, i) => (
-              <Card key={i} className="group hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
-                <CardHeader>
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-4 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                    <feature.icon className="h-6 w-6" />
-                  </div>
-                  <CardTitle className="text-xl">{feature.title}</CardTitle>
-                  <CardDescription>{feature.description}</CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">From Upload to Viral in 4 Steps</h2>
-            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              No complex workflows. No platform-specific knowledge required.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-4 gap-6 max-w-6xl mx-auto">
-            {[
-              { step: '01', title: 'Upload', desc: 'Drag & drop or paste a link. We handle transcoding, compression, and format conversion automatically.' },
-              { step: '02', title: 'Optimize', desc: 'Local AI rewrites captions, picks hashtags, generates thumbnails, and selects posting times per platform.' },
-              { step: '03', title: 'Amplify', desc: 'Browser automation posts natively to all platforms. Engages with comments, follows back, triggers algorithms.' },
-              { step: '04', title: 'Analyze', desc: 'Unified dashboard shows cross-platform performance. Viral coefficient, retention, revenue attribution.' },
-            ].map((item, i) => (
-              <div key={i} className="relative">
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
-                  {item.step}
-                </div>
-                <Card className="pt-10 h-full">
-                  <CardContent className="text-center">
-                    <h3 className="text-xl font-bold mb-2">{item.title}</h3>
-                    <p className="text-muted-foreground">{item.desc}</p>
-                  </CardContent>
-                </Card>
-                {i < 3 && (
-                  <div className="absolute top-0 right-0 w-full h-10 hidden md:block">
-                    <div className="w-full h-0.5 bg-border/50" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <Card className="max-w-3xl mx-auto bg-primary text-primary-foreground border-none">
-            <CardContent className="p-8 md:p-12 text-center">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Amplify?</h2>
-              <p className="text-primary-foreground/80 mb-8 text-lg">
-                Deploy on your infrastructure in 5 minutes. Start with the free tier — no credit card required.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/auth/signup">
-                  <Button size="lg" className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 px-8 py-3" style={{ fontSize: '1.125rem' }}>
-                    Deploy Free Now
-                    <ArrowRight className="h-5 w-5 ml-2" />
-                  </Button>
-                </Link>
-                <Link href="/docs">
-                  <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 px-8 py-3" style={{ fontSize: '1.125rem' }}>
-                    Read Documentation
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border/50 py-12 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div className="md:col-span-2">
-              <Link href="/" className="flex items-center gap-2 font-bold text-xl gradient-text mb-4">
-                <Zap className="h-6 w-6" />
-                Amplify
-              </Link>
-              <p className="text-muted-foreground max-w-sm">
-                The self-hosted video amplification platform. AI-powered optimization, 
-                cross-platform distribution, and real-time analytics — zero API costs.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="#features" className="hover:text-foreground transition-colors">Features</Link></li>
-                <li><Link href="#platforms" className="hover:text-foreground transition-colors">Platforms</Link></li>
-                <li><Link href="#pricing" className="hover:text-foreground transition-colors">Pricing</Link></li>
-                <li><Link href="/docs" className="hover:text-foreground transition-colors">Documentation</Link></li>
-                <li><Link href="/changelog" className="hover:text-foreground transition-colors">Changelog</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/about" className="hover:text-foreground transition-colors">About</Link></li>
-                <li><Link href="/blog" className="hover:text-foreground transition-colors">Blog</Link></li>
-                <li><Link href="/careers" className="hover:text-foreground transition-colors">Careers</Link></li>
-                <li><Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link></li>
-                <li><Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link></li>
-              </ul>
-            </div>
-          </div>
-          <Separator className="mb-8" />
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} Amplify. MIT Licensed. Built in public.
-            </p>
-            <div className="flex items-center gap-6">
-              <a href="https://github.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
-              </a>
-              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2c9 5 20 0 20-11.5a4.5 4.5 0 00-.08-.83A7.72 7.72 0 0023 3z"/></svg>
-              </a>
-              <a href="https://discord.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground transition-colors">
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.68 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.083.083 0 0 0 .031.057 19.9 19.9 0 0 0 5.994 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.007-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.645.77 1.255 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.004-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.672-3.547-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+    <footer className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-10 text-sm text-slate-400 md:flex-row md:items-center md:justify-between"><p>ViralBoost Creator · private, creator-authorized media adaptation.</p><div className="flex gap-4"><Link href="/studio" className="hover:text-white">Studio</Link><Link href="/dashboard" className="hover:text-white">Dashboard</Link><Link href="/developer" className="hover:text-white">Developer oversight</Link></div></footer>
+  </main>;
 }

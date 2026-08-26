@@ -4,8 +4,6 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { prettyJSON } from 'hono/pretty-json';
 import { HTTPException } from 'hono/http-exception';
-import { zValidator } from '@hono/zod-validator';
-import { z } from 'zod';
 import { verify } from 'hono/jwt';
 import pino from 'pino';
 
@@ -43,7 +41,7 @@ app.use('*', prettyJSON());
 app.use('*', cors({
   origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id', 'X-ViralBoost-Client'],
   credentials: true,
 }));
 

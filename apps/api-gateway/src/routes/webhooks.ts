@@ -2,13 +2,15 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
-import { verify } from 'hono/jwt';
 import { prisma } from '../lib/prisma.js';
 import axios from 'axios';
-import crypto from 'crypto';
+import crypto from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import type { Variables } from '../index.js';
 import { decideRetry, type RetryPolicy } from '../lib/reliability.js';
 import { verifyPlatformWebhook, SUPPORTED_PLATFORM_WEBHOOKS } from '../lib/platform-webhook-security.js';
+import { decryptToken, encryptToken, isEncryptedToken } from '../lib/token-crypto.js';
 
 const webhookSchema = z.object({
   name: z.string().min(1).max(100),
@@ -85,7 +87,7 @@ export function createWebhookRoutes() {
     ]);
     
     return c.json({
-      data: webhooks,
+      data: webhooks.map(redactWebhook),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   });
@@ -111,7 +113,7 @@ export function createWebhookRoutes() {
       throw new HTTPException(404, { message: 'Webhook not found' });
     }
     
-    return c.json({ data: webhook });
+    return c.json({ data: redactWebhook(webhook) });
   });
 
   app.post('/', zValidator('json', webhookSchema), async (c: any) => {
@@ -128,7 +130,7 @@ export function createWebhookRoutes() {
     }
     
     // Generate secret if not provided
-    const secret = body.secret || generateSecret();
+    const signingSecret = body.secret || generateSecret();
     
     const webhook = await prisma.webhook.create({
       data: {
@@ -136,7 +138,7 @@ export function createWebhookRoutes() {
         name: body.name,
         url: body.url,
         events: body.events,
-        secret,
+        secret: encryptToken(signingSecret),
         isActive: body.isActive,
         retryPolicy: body.retryPolicy || { maxRetries: 3, backoffMultiplier: 2, initialDelayMs: 1000 },
       },
@@ -144,9 +146,10 @@ export function createWebhookRoutes() {
     
     return c.json({ 
       data: { 
-        ...webhook,
+        ...redactWebhook(webhook),
         userId: user.id, 
-        createdAt: webhook.createdAt.toISOString() 
+        createdAt: webhook.createdAt.toISOString(),
+        signingSecret,
       } 
     }, 201);
   });
@@ -179,13 +182,13 @@ export function createWebhookRoutes() {
         name: body.name,
         url: body.url,
         events: body.events,
-        secret: body.secret,
+        secret: body.secret ? encryptToken(body.secret) : undefined,
         isActive: body.isActive,
         retryPolicy: body.retryPolicy,
       },
     });
     
-    return c.json({ data: updated });
+    return c.json({ data: redactWebhook(updated) });
   });
 
   app.delete('/:id', async (c: any) => {
@@ -245,12 +248,15 @@ export function createWebhookRoutes() {
     };
     
     try {
+      await assertPublicWebhookUrl(webhook.url);
+      const signingSecret = decryptWebhookSecret(webhook.secret);
       const response = await axios.post(webhook.url, testPayload, {
         headers: {
           'Content-Type': 'application/json',
-          'X-Webhook-Signature': generateSignature(JSON.stringify(testPayload), webhook.secret),
+          'X-Webhook-Signature': generateSignature(JSON.stringify(testPayload), signingSecret),
         },
         timeout: 10000,
+        maxRedirects: 0,
       });
       
       // Record delivery attempt
@@ -277,7 +283,7 @@ export function createWebhookRoutes() {
           event,
           payload: testPayload,
           responseStatus: err.response?.status || 0,
-          responseBody: err.response?.data ? JSON.stringify(err.response.data) : String(err),
+          responseBody: safeDeliveryFailureSummary(err),
           success: false,
         },
       });
@@ -285,7 +291,7 @@ export function createWebhookRoutes() {
       return c.json({ 
         success: false, 
         message: 'Test webhook failed',
-        error: String(err),
+        error: 'The webhook delivery could not be completed. Review the endpoint and retry when it is available.',
       });
     }
   });
@@ -381,12 +387,15 @@ export function createWebhookRoutes() {
 
     // Retry the delivery within its configured recovery budget.
     try {
+      await assertPublicWebhookUrl(webhook.url);
+      const signingSecret = decryptWebhookSecret(webhook.secret);
       const response = await axios.post(webhook.url, delivery.payload, {
         headers: {
           'Content-Type': 'application/json',
-          'X-Webhook-Signature': generateSignature(JSON.stringify(delivery.payload), webhook.secret),
+          'X-Webhook-Signature': generateSignature(JSON.stringify(delivery.payload), signingSecret),
         },
         timeout: 10000,
+        maxRedirects: 0,
       });
       
       await prisma.webhookDelivery.update({
@@ -408,13 +417,13 @@ export function createWebhookRoutes() {
         where: { id: deliveryId },
         data: {
           responseStatus,
-          responseBody: err.response?.data ? JSON.stringify(err.response.data) : String(err),
+          responseBody: safeDeliveryFailureSummary(err),
           success: false,
           retryCount,
         },
       });
       
-      return c.json({ success: false, message: 'Retry failed', error: String(err), retry });
+      return c.json({ success: false, message: 'Retry failed', error: 'The webhook delivery could not be completed. Review the endpoint and retry when it is available.', retry });
     }
   });
 
@@ -454,6 +463,54 @@ function generateSecret(): string {
 }
 
 function generateSignature(payload: string, secret: string): string {
-  // In production, use proper HMAC
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
+}
+
+function redactWebhook<T extends { secret: string }>(webhook: T) {
+  const { secret: _secret, ...safeWebhook } = webhook;
+  return safeWebhook;
+}
+
+function decryptWebhookSecret(storedSecret: string) {
+  return isEncryptedToken(storedSecret) ? decryptToken(storedSecret) : storedSecret;
+}
+
+function safeDeliveryFailureSummary(error: unknown) {
+  const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+  return status ? `Webhook endpoint returned HTTP ${status}.` : 'Webhook delivery could not be completed.';
+}
+
+export function isPrivateOrReservedAddress(address: string) {
+  if (address.includes(':')) {
+    const normalized = address.toLowerCase();
+    return normalized === '::1' || normalized === '::' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:') || normalized.startsWith('::ffff:127.');
+  }
+  const octets = address.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const [first, second] = octets;
+  return first === 0 || first === 10 || first === 127 || first >= 224 || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168) || (first === 100 && second >= 64 && second <= 127);
+}
+
+export async function assertPublicWebhookUrl(rawUrl: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new HTTPException(400, { message: 'Webhook URL must be a valid public HTTPS URL.' });
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port && parsed.port !== '443') {
+    throw new HTTPException(400, { message: 'Webhook delivery requires a public HTTPS URL without embedded credentials.' });
+  }
+  if (parsed.hostname === 'localhost' || parsed.hostname.endsWith('.localhost')) {
+    throw new HTTPException(400, { message: 'Webhook delivery cannot target local or private network addresses.' });
+  }
+  let addresses: { address: string }[];
+  try {
+    addresses = isIP(parsed.hostname) ? [{ address: parsed.hostname }] : await lookup(parsed.hostname, { all: true, verbatim: true });
+  } catch {
+    throw new HTTPException(400, { message: 'Webhook URL must resolve to a public network address.' });
+  }
+  if (!addresses.length || addresses.some((record) => isPrivateOrReservedAddress(record.address))) {
+    throw new HTTPException(400, { message: 'Webhook delivery cannot target local or private network addresses.' });
+  }
 }

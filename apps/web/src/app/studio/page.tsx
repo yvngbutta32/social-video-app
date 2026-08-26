@@ -1,12 +1,12 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
-import { useSession } from 'next-auth/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { apiRequest, getAdaptationPreview, getClipCandidates, getProcessingDiagnostics, retryVideoProcessing, type AdaptationRecord, type ApiSocialAccount, type ApiVideo, type ClipCandidate, type GrowthPlan, type LearningSignal, type Readiness, type ReachPlan, type ExperimentScorecard, type PublishingIntentSummary } from '@/lib/api-client';
+import { useBrowserSession } from '@/lib/browser-session';
 import {
   ArrowLeft,
   ArrowRight,
@@ -52,8 +52,6 @@ type Experiment = {
   tone: string;
   mark: string;
 };
-
-type SessionWithToken = { accessToken?: string };
 
 type FingerprintResponse = {
   data: {
@@ -167,8 +165,7 @@ export default function GrowthStudioPage() {
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [sourceStatus, setSourceStatus] = useState<ApiVideo['status'] | null>(null);
   const [fingerprintSignals, setFingerprintSignals] = useState(sourceSignals);
-  const { data: session } = useSession();
-  const accessToken = (session as SessionWithToken | null)?.accessToken;
+  const { accessToken } = useBrowserSession();
 
   const sourcesQuery = useQuery({
     queryKey: ['studio', 'sources', accessToken],

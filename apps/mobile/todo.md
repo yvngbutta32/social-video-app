@@ -26,3 +26,17 @@
 - [x] Remove the residual template environment loader from the native configuration path.
 - [x] Map verified adaptation-candidate and recipe API responses into the native review experience.
 - [x] Add private artifact preview handling only for deployment-reachable signed URLs.
+- [x] Audit primary and mobile repository cleanliness, dependency health, and source-boundary risks.
+- [x] Audit security and privacy boundaries for secrets, credentials, workspace isolation, and creator authorization.
+- [x] Re-run comprehensive primary and mobile automated validation suites and triage failures.
+- [x] Remediate validated code-level audit findings and preserve a verified audit milestone.
+- [x] Retire legacy intelligence endpoints that emit unsupported virality, reach, or synthetic-growth predictions.
+- [x] Harden creator webhook delivery against SSRF, plaintext secret exposure, and raw transport-error disclosure.
+- [x] Allow the authenticated workspace-selection header through the API CORS policy without broadening origins.
+- [x] Repair the web production prerender failure by enforcing production NODE_ENV in the build command.
+- [x] Replace stale web landing-page and metadata claims that conflict with the creator-authorized ViralBoost product boundary.
+- [x] Remove residual NextAuth and template-provider wiring from the web runtime in favor of the self-owned API session boundary.
+- [x] Revert the unnecessary React major-version experiment after isolating the build environment root cause.
+- [x] Remove residual mobile template scheme logic and unused scaffold metadata from the primary source package.
+- [x] Upgrade the web test-toolchain dependency chain to remediate its Vite and esbuild development-only advisories.
+- [ ] Resolve Expo SDK transitive advisories only through a tested SDK-supported dependency update; manual overrides broke the Expo-compatible Vitest and Vite graph and were reverted.

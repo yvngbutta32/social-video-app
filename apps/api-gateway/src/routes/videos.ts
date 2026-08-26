@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
-import { assertPublishingAllowed, requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
+import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 import { uploadSource } from '../lib/source-storage.js';
 import { enqueueVideoProcessing } from '../lib/processing-dispatch';
 import { buildProcessingDiagnostic } from '../lib/processing-diagnostics.js';
@@ -228,7 +228,7 @@ export function createVideoRoutes() {
           safeguards: ['The original source remains unchanged. Review the new progress state before attempting another retry.'],
         },
       });
-    } catch (error) {
+    } catch {
       throw new HTTPException(503, { message: 'Processing could not be requeued. Your source remains private and unchanged; retry after the processing service is available.' });
     }
   });

@@ -5,7 +5,6 @@ const VERSION = 'v1';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 12;
 const SALT_LENGTH = 16;
-const TAG_LENGTH = 16;
 
 function keyFromSecret(secret: string, salt: Buffer) {
   if (!secret) throw new Error('ENCRYPTION_KEY is required for token storage');

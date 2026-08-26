@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useBrowserSession } from './browser-session';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -18,15 +18,6 @@ interface UseWebSocketOptions {
   onError?: (error: Event) => void;
   reconnect?: boolean;
   reconnectInterval?: number;
-}
-
-interface SessionData {
-  accessToken?: string;
-  user?: {
-    id: string;
-    email: string;
-    name?: string;
-  };
 }
 
 type RuntimeWindow = Window & { __NEXT_PUBLIC_WS_URL__?: string };
@@ -56,7 +47,7 @@ function stringField(value: unknown, key: string): string | undefined {
 }
 
 export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
-  const { data: session } = useSession() as { data: SessionData | null };
+  const { accessToken } = useBrowserSession();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempts = useRef(0);
@@ -68,7 +59,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
-    const token = session?.accessToken || '';
+    const token = accessToken || '';
     const ws = new WebSocket(`${url}?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
 
@@ -98,7 +89,7 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
     };
 
     ws.onerror = (event) => onError?.(event);
-  }, [url, session?.accessToken, onMessage, onConnect, onDisconnect, onError, reconnect, reconnectInterval]);
+  }, [url, accessToken, onMessage, onConnect, onDisconnect, onError, reconnect, reconnectInterval]);
 
   useEffect(() => {
     connectRef.current = connect;
