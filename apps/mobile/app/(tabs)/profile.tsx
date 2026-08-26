@@ -26,6 +26,7 @@ export default function ProfileScreen() {
           <StatusPill tone={apiConfigured ? "ready" : "attention"}>{apiConfigured ? "API BUILD CONFIGURED" : "API BUILD NOT CONFIGURED"}</StatusPill>
           <Text style={[styles.copy, { color: colors.muted }]}>{apiConfigured ? "This build can request an invited workspace session and stores only small session credentials in the device Keychain or Android Keystore." : "This local build supports private media preparation, but a production ViralBoost API URL is required before it can connect to an invited workspace or upload media."}</Text>
           <Pressable onPress={() => router.push("/sign-in" as never)} style={({ pressed }) => [styles.connect, { borderColor: colors.border }, pressed && styles.pressed]}><Text style={[styles.connectText, { color: colors.foreground }]}>{apiConfigured ? "Connect invited workspace" : "View connection requirements"}</Text></Pressable>
+          {apiConfigured ? <Pressable onPress={() => router.push("/workspace-selector" as never)} style={({ pressed }) => [styles.connect, { borderColor: colors.border }, pressed && styles.pressed]}><Text style={[styles.connectText, { color: colors.foreground }]}>Choose active workspace</Text></Pressable> : null}
         </CreatorCard>
       </View>
     </ScreenContainer>

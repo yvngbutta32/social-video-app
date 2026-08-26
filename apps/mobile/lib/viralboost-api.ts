@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 
 import { parseAdaptationDetail, parseAdaptationPlan, parseAdaptationSave, parsePrivateArtifactPreview } from "@/lib/adaptation-contract";
-import { parseNativeAuthData, selectWorkspaceId } from "@/lib/mobile-auth-contract";
+import { assertAuthorizedWorkspace, listAuthorizedWorkspaces, parseNativeAuthData, selectWorkspaceId, type AuthorizedWorkspace, type MobileAuthData } from "@/lib/mobile-auth-contract";
 import { parseSourceAnalytics } from "@/lib/analytics-contract";
 import { parseProcessingDiagnostic } from "@/lib/processing-contract";
 import { parseWorkspaceSources } from "@/lib/source-sync-contract";
@@ -33,20 +33,32 @@ async function nativePublicRequest(path: string, body: Record<string, unknown>) 
   return response.json() as Promise<unknown>;
 }
 
-async function nativeMe(accessToken: string) {
+type NativeMeResponse = { data?: { workspaces?: { workspace?: { id?: string; name?: string | null; slug?: string | null } }[] } };
+export type PendingNativeSession = { auth: MobileAuthData; workspaces: AuthorizedWorkspace[] };
+
+async function nativeMe(accessToken: string): Promise<NativeMeResponse> {
   const baseUrl = apiBaseUrl();
   const response = await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!response.ok) throw new Error(await parseApiError(response));
-  return response.json() as Promise<{ data?: { workspaces?: { workspace?: { id?: string } }[] } }>;
+  return response.json() as Promise<NativeMeResponse>;
 }
 
-export async function signInToViralBoost(email: string, password: string) {
+export async function beginViralBoostSignIn(email: string, password: string): Promise<PendingNativeSession> {
   const payload = await nativePublicRequest("/api/v1/auth/login", { email: email.trim().toLowerCase(), password, rememberMe: true });
   const auth = parseNativeAuthData(payload);
   const me = await nativeMe(auth.accessToken);
-  const workspaceId = selectWorkspaceId(me.data?.workspaces ?? []);
-  await saveSecureSession(auth.accessToken, auth.refreshToken, workspaceId);
-  return { user: auth.user, workspaceId };
+  return { auth, workspaces: listAuthorizedWorkspaces(me.data?.workspaces ?? []) };
+}
+
+export async function completeViralBoostSignIn(candidate: PendingNativeSession, workspaceId: string) {
+  assertAuthorizedWorkspace(candidate.workspaces, workspaceId);
+  await saveSecureSession(candidate.auth.accessToken, candidate.auth.refreshToken, workspaceId);
+  return { user: candidate.auth.user, workspaceId };
+}
+
+export async function signInToViralBoost(email: string, password: string) {
+  const candidate = await beginViralBoostSignIn(email, password);
+  return completeViralBoostSignIn(candidate, selectWorkspaceId(candidate.workspaces.map((workspace) => ({ workspace }))));
 }
 
 export async function refreshViralBoostSession() {
@@ -55,9 +67,24 @@ export async function refreshViralBoostSession() {
   const payload = await nativePublicRequest("/api/v1/auth/refresh", { refreshToken: session.refreshToken });
   const auth = parseNativeAuthData(payload);
   const me = await nativeMe(auth.accessToken);
-  const workspaceId = selectWorkspaceId(me.data?.workspaces ?? []);
+  const workspaces = listAuthorizedWorkspaces(me.data?.workspaces ?? []);
+  const workspaceId = session.workspaceId ? assertAuthorizedWorkspace(workspaces, session.workspaceId).id : selectWorkspaceId(workspaces.map((workspace) => ({ workspace })));
   await saveSecureSession(auth.accessToken, auth.refreshToken, workspaceId);
   return { user: auth.user, workspaceId };
+}
+
+export async function getAuthorizedWorkspaces() {
+  const session = await getSecureSession();
+  if (!session.accessToken) throw new Error("Connect an invited creator session before choosing a workspace.");
+  const me = await nativeMe(session.accessToken);
+  return listAuthorizedWorkspaces(me.data?.workspaces ?? []);
+}
+
+export async function selectViralBoostWorkspace(workspaceId: string) {
+  const session = await getSecureSession();
+  if (!session.accessToken || !session.refreshToken) throw new Error("Connect an invited creator session before choosing a workspace.");
+  assertAuthorizedWorkspace(await getAuthorizedWorkspaces(), workspaceId);
+  await saveSecureSession(session.accessToken, session.refreshToken, workspaceId);
 }
 
 export async function signOutOfViralBoost() {

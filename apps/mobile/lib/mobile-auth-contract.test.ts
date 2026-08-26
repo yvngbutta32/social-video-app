@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseNativeAuthData, selectWorkspaceId } from "./mobile-auth-contract";
+import { assertAuthorizedWorkspace, listAuthorizedWorkspaces, parseNativeAuthData, selectWorkspaceId } from "./mobile-auth-contract";
 
 describe("native ViralBoost authentication contract", () => {
   it("accepts a complete native-only token response", () => {
@@ -14,5 +14,13 @@ describe("native ViralBoost authentication contract", () => {
   it("selects an available invited workspace and rejects missing membership", () => {
     expect(selectWorkspaceId([{ workspace: { id: "workspace-1" } }])).toBe("workspace-1");
     expect(() => selectWorkspaceId([])).toThrow(/workspace/i);
+  });
+
+  it("requires an explicit choice for multiple authorized workspaces", () => {
+    const workspaces = listAuthorizedWorkspaces([{ workspace: { id: "one", name: "One" } }, { workspace: { id: "two", name: "Two" } }, { workspace: { id: "one", name: "One" } }]);
+    expect(workspaces).toEqual([{ id: "one", name: "One", slug: null }, { id: "two", name: "Two", slug: null }]);
+    expect(() => selectWorkspaceId([{ workspace: { id: "one" } }, { workspace: { id: "two" } }])).toThrow(/choose/i);
+    expect(assertAuthorizedWorkspace(workspaces, "two").name).toBe("Two");
+    expect(() => assertAuthorizedWorkspace(workspaces, "missing")).toThrow(/authorized/i);
   });
 });

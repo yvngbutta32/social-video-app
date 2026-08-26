@@ -70,4 +70,12 @@
 - [x] Verify multipart upload session persistence and define an expiry-based creator-safe cleanup policy.
 - [x] Implement a protected maintenance trigger that aborts expired private upload sessions without deleting completed creator sources.
 - [ ] Configure a persistent scheduled caller for protected multipart cleanup after the production connector secret is provisioned.
+- [x] Audit every live API route for arbitrary first-membership workspace selection and harden confirmed instances.
+- [x] Add a uniform workspace-resolution regression gate for live creator data routes.
+- [x] Replace arbitrary workspace membership selection in live account, campaign, and webhook routes with explicit selected-workspace authorization.
+- [x] Add multipart-cleanup and uniform workspace-resolution contracts to the API CI gate.
+- [x] Verify authorized workspace-list contracts for web and native sessions.
+- [x] Add an explicit workspace selector to web and native creator interfaces with safe persisted selection.
+- [x] Pass the selected workspace through all authenticated Growth Studio account, publishing, readiness, learning, and adaptation requests.
+- [ ] Validate multi-workspace selection persistence with an invited account that belongs to more than one workspace before release.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.

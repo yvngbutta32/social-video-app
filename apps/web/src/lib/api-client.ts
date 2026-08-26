@@ -172,8 +172,8 @@ export type AdaptationPreview = {
   safeguards: string[];
 };
 
-export function getAdaptationPreview(variantId: string, kind: 'video' | 'thumbnail' = 'video', accessToken?: string) {
-  return apiRequest<{ data: AdaptationPreview }>(`/growth/adaptations/${variantId}/preview?kind=${kind}`, accessToken);
+export function getAdaptationPreview(variantId: string, kind: 'video' | 'thumbnail' = 'video', accessToken?: string, workspaceId?: string) {
+  return apiRequest<{ data: AdaptationPreview }>(`/growth/adaptations/${variantId}/preview?kind=${kind}`, accessToken, undefined, workspaceId);
 }
 
 
@@ -197,8 +197,8 @@ export type ClipCandidateResponse = {
   safeguards: string[];
 };
 
-export function getClipCandidates(videoId: string, platform: string, accessToken?: string) {
-  return apiRequest<{ data: ClipCandidateResponse }>(`/growth/clip-candidates/${videoId}?platform=${encodeURIComponent(platform)}`, accessToken);
+export function getClipCandidates(videoId: string, platform: string, accessToken?: string, workspaceId?: string) {
+  return apiRequest<{ data: ClipCandidateResponse }>(`/growth/clip-candidates/${videoId}?platform=${encodeURIComponent(platform)}`, accessToken, undefined, workspaceId);
 }
 
 

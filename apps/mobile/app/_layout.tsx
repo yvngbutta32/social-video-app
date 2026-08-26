@@ -20,6 +20,7 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="sign-in" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+              <Stack.Screen name="workspace-selector" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="processing-detail" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="artifact-preview" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="review" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

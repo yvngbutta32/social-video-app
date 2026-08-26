@@ -165,7 +165,7 @@ export default function GrowthStudioPage() {
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [sourceStatus, setSourceStatus] = useState<ApiVideo['status'] | null>(null);
   const [fingerprintSignals, setFingerprintSignals] = useState(sourceSignals);
-  const { accessToken, workspaceId } = useBrowserSession();
+  const { accessToken, workspaceId, workspaces, selectWorkspace } = useBrowserSession();
 
   const sourcesQuery = useQuery({
     queryKey: ['studio', 'sources', accessToken, workspaceId],
@@ -173,9 +173,9 @@ export default function GrowthStudioPage() {
     enabled: Boolean(accessToken && workspaceId),
   });
   const accountsQuery = useQuery({
-    queryKey: ['studio', 'accounts', accessToken],
-    queryFn: () => apiRequest<{ data: ApiSocialAccount[] }>('/accounts?status=active&limit=20', accessToken),
-    enabled: Boolean(accessToken),
+    queryKey: ['studio', 'accounts', accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: ApiSocialAccount[] }>('/accounts?status=active&limit=20', accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId),
   });
   const uploadMutation = useMutation({
     mutationFn: (file: File) => { if (!workspaceId) throw new Error('Select an authorized workspace before uploading a private source.'); const form = new FormData(); form.append('file', file); return apiRequest<{ data: ApiVideo; nextStep: string }>('/videos/upload', accessToken, { method: 'POST', body: form }, workspaceId); },
@@ -183,9 +183,9 @@ export default function GrowthStudioPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not upload this source'),
   });
   const readinessQuery = useQuery({
-    queryKey: ['studio', 'readiness', sourceId, accessToken],
-    queryFn: () => apiRequest<{ data: Readiness }>(`/growth/readiness/${sourceId}`, accessToken),
-    enabled: Boolean(accessToken && sourceId),
+    queryKey: ['studio', 'readiness', sourceId, accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: Readiness }>(`/growth/readiness/${sourceId}`, accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId),
   });
   const sourceStatusQuery = useQuery({
     queryKey: ['studio', 'source-status', sourceId, accessToken, workspaceId],
@@ -212,23 +212,23 @@ export default function GrowthStudioPage() {
   });
   const processingDiagnostic = processingDiagnosticsQuery.data?.data.diagnostic;
   const publishingQuery = useQuery({
-    queryKey: ['studio', 'publishing-intents', accessToken],
-    queryFn: () => apiRequest<{ data: PublishingIntentSummary[] }>('/publishing/intents?limit=5', accessToken),
-    enabled: Boolean(accessToken),
+    queryKey: ['studio', 'publishing-intents', accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: PublishingIntentSummary[] }>('/publishing/intents?limit=5', accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId),
     refetchInterval: 15000,
   });
   const learningQuery = useQuery({
-    queryKey: ['studio', 'learning', sourceId, accessToken],
-    queryFn: () => apiRequest<{ data: LearningSignal }>(`/growth/learning-signal/${sourceId}?objective=retention`, accessToken),
-    enabled: Boolean(accessToken && sourceId),
+    queryKey: ['studio', 'learning', sourceId, accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: LearningSignal }>(`/growth/learning-signal/${sourceId}?objective=retention`, accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId),
   });
   const fingerprintMutation = useMutation({
-    mutationFn: () => apiRequest<FingerprintResponse>('/growth/source-fingerprint', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId }) }),
+    mutationFn: () => apiRequest<FingerprintResponse>('/growth/source-fingerprint', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId }) }, workspaceId),
     onSuccess: (response) => { setFingerprintSignals(response.data.durableSignals.map((signal) => ({ label: signal.label, value: signal.value, detail: signal.evidence }))); setStage('analysis'); toast.success('Creative fingerprint ready'); },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not analyze this source'),
   });
   const planMutation = useMutation({
-    mutationFn: (platforms: string[]) => apiRequest<PlanResponse>('/growth/experiment-plan', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId, platforms, objective: 'retention' }) }),
+    mutationFn: (platforms: string[]) => apiRequest<PlanResponse>('/growth/experiment-plan', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId, platforms, objective: 'retention' }) }, workspaceId),
     onSuccess: (response) => { setExperiments(mapPlanToExperiments(response.data.experiments)); setStage('experiments'); toast.success('Live platform-native experiment slate prepared'); },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not prepare the experiment slate'),
   });
@@ -239,23 +239,23 @@ export default function GrowthStudioPage() {
   const [selectedClipCandidate, setSelectedClipCandidate] = useState<ClipCandidate | null>(null);
 
   const adaptationQuery = useQuery({
-    queryKey: ['studio', 'adaptation', activeAdaptationId, accessToken],
-    queryFn: () => apiRequest<{ data: AdaptationRecord }>(`/growth/adaptations/${activeAdaptationId}`, accessToken),
-    enabled: Boolean(accessToken && activeAdaptationId),
+    queryKey: ['studio', 'adaptation', activeAdaptationId, accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: AdaptationRecord }>(`/growth/adaptations/${activeAdaptationId}`, accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && activeAdaptationId),
   });
   const artifactPreviewQuery = useQuery({
-    queryKey: ['studio', 'adaptation-preview', activeAdaptationId, adaptationQuery.data?.data.recipe.provenance.revision, adaptationQuery.data?.data.artifact?.objectKey, accessToken],
-    queryFn: () => getAdaptationPreview(activeAdaptationId!, 'video', accessToken),
-    enabled: Boolean(accessToken && activeAdaptationId && adaptationQuery.data?.data.artifact?.objectKey),
+    queryKey: ['studio', 'adaptation-preview', activeAdaptationId, adaptationQuery.data?.data.recipe.provenance.revision, adaptationQuery.data?.data.artifact?.objectKey, accessToken, workspaceId],
+    queryFn: () => getAdaptationPreview(activeAdaptationId!, 'video', accessToken, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && activeAdaptationId && adaptationQuery.data?.data.artifact?.objectKey),
     staleTime: 240_000,
   });
   const clipCandidatesQuery = useQuery({
-    queryKey: ['studio', 'clip-candidates', sourceId, activeAdaptationId, adaptationQuery.data?.data.platform, accessToken],
-    queryFn: () => getClipCandidates(sourceId!, adaptationQuery.data!.data.platform, accessToken),
-    enabled: Boolean(accessToken && sourceId && activeAdaptationId && adaptationQuery.data?.data.platform),
+    queryKey: ['studio', 'clip-candidates', sourceId, activeAdaptationId, adaptationQuery.data?.data.platform, accessToken, workspaceId],
+    queryFn: () => getClipCandidates(sourceId!, adaptationQuery.data!.data.platform, accessToken, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId && activeAdaptationId && adaptationQuery.data?.data.platform),
   });
   const adaptationEditMutation = useMutation({
-    mutationFn: (input: { variantId: string; edit: Record<string, unknown> }) => apiRequest<{ data: { variantId: string; renderState: string } }>(`/growth/adaptations/${input.variantId}`, accessToken, { method: 'PUT', body: JSON.stringify(input.edit) }),
+    mutationFn: (input: { variantId: string; edit: Record<string, unknown> }) => apiRequest<{ data: { variantId: string; renderState: string } }>(`/growth/adaptations/${input.variantId}`, accessToken, { method: 'PUT', body: JSON.stringify(input.edit) }, workspaceId),
     onSuccess: () => {
       setSelectedClipCandidate(null);
       void adaptationQuery.refetch();
@@ -290,14 +290,14 @@ export default function GrowthStudioPage() {
   const selectedPlatforms = useMemo(() => experiments.filter((experiment) => experiment.selected).map((experiment) => Object.entries(platformLabels).find(([, label]) => label === experiment.platform)?.[0]).filter((platform): platform is string => Boolean(platform)), [experiments]);
   const connectedAccountCount = accountsQuery.data?.data.filter((account) => account.isActive).length ?? 0;
   const reachPlanQuery = useQuery({
-    queryKey: ['studio', 'reach-plan', sourceId, accessToken, selectedPlatforms.join(',')],
-    queryFn: () => apiRequest<{ data: ReachPlan }>('/growth/reach-plan', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId, platforms: selectedPlatforms, objective: 'retention' }) }),
-    enabled: Boolean(accessToken && sourceId && effectiveSourceStatus === 'ready' && selectedPlatforms.length > 0),
+    queryKey: ['studio', 'reach-plan', sourceId, accessToken, workspaceId, selectedPlatforms.join(',')],
+    queryFn: () => apiRequest<{ data: ReachPlan }>('/growth/reach-plan', accessToken, { method: 'POST', body: JSON.stringify({ videoId: sourceId, platforms: selectedPlatforms, objective: 'retention' }) }, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId && effectiveSourceStatus === 'ready' && selectedPlatforms.length > 0),
   });
   const scorecardQuery = useQuery({
-    queryKey: ['studio', 'scorecard', sourceId, accessToken],
-    queryFn: () => apiRequest<{ data: ExperimentScorecard }>(`/growth/scorecard/${sourceId}?objective=retention`, accessToken),
-    enabled: Boolean(accessToken && sourceId && effectiveSourceStatus === 'ready'),
+    queryKey: ['studio', 'scorecard', sourceId, accessToken, workspaceId],
+    queryFn: () => apiRequest<{ data: ExperimentScorecard }>(`/growth/scorecard/${sourceId}?objective=retention`, accessToken, undefined, workspaceId),
+    enabled: Boolean(accessToken && workspaceId && sourceId && effectiveSourceStatus === 'ready'),
     refetchInterval: 15000,
   });
 
@@ -306,12 +306,12 @@ export default function GrowthStudioPage() {
     if (!file) return;
     setFileName(file.name);
     setFingerprintSignals(sourceSignals);
-    if (accessToken) {
+    if (accessToken && workspaceId) {
       uploadMutation.mutate(file);
     } else {
       setSourceId(null);
       setSourceStatus(null);
-      toast('Sign in to upload this source into your private workspace.');
+      toast(accessToken ? 'Choose an authorized workspace before uploading this source.' : 'Sign in to upload this source into your private workspace.');
     }
   }
 
@@ -368,7 +368,7 @@ export default function GrowthStudioPage() {
 
   return (
     <div className="min-h-screen bg-[#090d13] text-white">
-      <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#090d13]/90 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-[1540px] items-center justify-between px-4 sm:px-6 lg:px-8"><div className="flex items-center gap-3"><Link href="/dashboard" className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-400 transition hover:bg-white/[0.08] hover:text-white" aria-label="Return to dashboard"><ArrowLeft className="h-4 w-4" /></Link><div><p className="text-sm font-bold tracking-tight text-white">Growth Studio</p><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-300">Creator workspace</p></div></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-200 sm:flex"><CircleCheck className="h-3.5 w-3.5" />Private workspace</div><Link href="/dashboard" className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"><LayoutDashboard className="h-3.5 w-3.5" />Overview</Link></div></div></header>
+      <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#090d13]/90 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-[1540px] items-center justify-between px-4 sm:px-6 lg:px-8"><div className="flex items-center gap-3"><Link href="/dashboard" className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-400 transition hover:bg-white/[0.08] hover:text-white" aria-label="Return to dashboard"><ArrowLeft className="h-4 w-4" /></Link><div><p className="text-sm font-bold tracking-tight text-white">Growth Studio</p><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-300">Creator workspace</p></div></div><div className="flex items-center gap-3">{workspaces.length ? <select aria-label="Choose creator workspace" value={workspaceId || ""} onChange={(event) => selectWorkspace(event.target.value)} className="max-w-40 rounded-lg border border-white/[0.1] bg-[#111720] px-2 py-1.5 text-[11px] font-semibold text-slate-200 outline-none focus:border-cyan-300/50"><option value="" disabled>Choose workspace</option>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.slug || "Creator workspace"}</option>)}</select> : null}<div className="hidden items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-emerald-200 sm:flex"><CircleCheck className="h-3.5 w-3.5" />{workspaceId ? "Private workspace" : "Select workspace"}</div><Link href="/dashboard" className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"><LayoutDashboard className="h-3.5 w-3.5" />Overview</Link></div></div></header>
 
       <main className="mx-auto max-w-[1540px] px-4 py-7 sm:px-6 lg:px-8 lg:py-10"><div className="mx-auto max-w-5xl"><div className="text-center"><div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/15 bg-cyan-300/[0.05] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-cyan-200"><WandSparkles className="h-3.5 w-3.5" />One source. A smarter growth loop.</div><h1 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Turn what you already made into<br /><span className="text-slate-500">better platform-native experiments.</span></h1><p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-400">Upload a source video. ViralBoost identifies the durable creative signal, prepares controlled adaptations for your connected accounts, and learns from the outcomes.</p></div><div className="mt-8"><StageIndicator current={stage} /></div></div>
 

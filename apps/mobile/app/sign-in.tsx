@@ -6,7 +6,7 @@ import { CreatorCard, Eyebrow, StatusPill } from "@/components/creator-ui";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
-import { isViralBoostApiConfigured, signInToViralBoost } from "@/lib/viralboost-api";
+import { type PendingNativeSession, beginViralBoostSignIn, completeViralBoostSignIn, isViralBoostApiConfigured } from "@/lib/viralboost-api";
 
 export default function SignInScreen() {
   const colors = useColors();
@@ -14,6 +14,7 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [candidate, setCandidate] = useState<PendingNativeSession | null>(null);
   const apiConfigured = isViralBoostApiConfigured();
 
   const signIn = async () => {
@@ -28,13 +29,26 @@ export default function SignInScreen() {
     setBusy(true);
     setNotice(null);
     try {
-      await signInToViralBoost(email, password);
-      router.back();
+      const nextCandidate = await beginViralBoostSignIn(email, password);
+      if (nextCandidate.workspaces.length === 1) {
+        await completeViralBoostSignIn(nextCandidate, nextCandidate.workspaces[0].id);
+        router.back();
+      } else {
+        setCandidate(nextCandidate);
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "The invited workspace could not be connected.");
     } finally {
       setBusy(false);
     }
+  };
+
+  const selectWorkspace = async (workspaceId: string) => {
+    if (!candidate) return;
+    setBusy(true); setNotice(null);
+    try { await completeViralBoostSignIn(candidate, workspaceId); router.back(); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "The selected workspace could not be connected."); }
+    finally { setBusy(false); }
   };
 
   return (
@@ -43,11 +57,11 @@ export default function SignInScreen() {
         <View style={styles.header}><Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, { backgroundColor: colors.surface, borderColor: colors.border }, pressed && styles.pressed]}><IconSymbol name="chevron.left" size={22} color={colors.foreground} /></Pressable><View><Eyebrow>Invite-only access</Eyebrow><Text style={[styles.title, { color: colors.foreground }]}>Connect your workspace</Text></View></View>
         <CreatorCard style={styles.card}>
           <StatusPill tone={apiConfigured ? "ready" : "attention"}>{apiConfigured ? "SECURE API CONFIGURED" : "API CONFIGURATION REQUIRED"}</StatusPill>
-          <Text style={[styles.copy, { color: colors.muted }]}>Sign in only with an approved ViralBoost creator invitation. On a native device, the access and rotated refresh credentials are stored in protected device storage; your original media remains separate until you explicitly upload it.</Text>
-          <Text style={[styles.label, { color: colors.foreground }]}>Email</Text><TextInput value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" returnKeyType="next" placeholder="creator@example.com" placeholderTextColor={colors.muted} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
-          <Text style={[styles.label, { color: colors.foreground }]}>Password</Text><TextInput value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" returnKeyType="done" onSubmitEditing={signIn} placeholder="Your private password" placeholderTextColor={colors.muted} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+          <Text style={[styles.copy, { color: colors.muted }]}>{candidate ? "This invited account is authorized for more than one workspace. Choose the one whose private media and creator records you want to access." : "Sign in only with an approved ViralBoost creator invitation. On a native device, the access and rotated refresh credentials are stored in protected device storage; your original media remains separate until you explicitly upload it."}</Text>
+          {!candidate ? <><Text style={[styles.label, { color: colors.foreground }]}>Email</Text><TextInput value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" returnKeyType="next" placeholder="creator@example.com" placeholderTextColor={colors.muted} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} />
+          <Text style={[styles.label, { color: colors.foreground }]}>Password</Text><TextInput value={password} onChangeText={setPassword} secureTextEntry autoComplete="current-password" returnKeyType="done" onSubmitEditing={signIn} placeholder="Your private password" placeholderTextColor={colors.muted} style={[styles.input, { color: colors.foreground, borderColor: colors.border }]} /></> : <View style={styles.workspaceList}>{candidate.workspaces.map((workspace) => <Pressable key={workspace.id} onPress={() => void selectWorkspace(workspace.id)} disabled={busy} style={({ pressed }) => [styles.workspace, { borderColor: colors.border, backgroundColor: colors.surface }, (pressed || busy) && styles.pressed]}><View><Text style={[styles.workspaceName, { color: colors.foreground }]}>{workspace.name}</Text><Text style={[styles.workspaceMeta, { color: colors.muted }]}>{workspace.slug ? `@${workspace.slug}` : "Authorized creator workspace"}</Text></View><IconSymbol name="chevron.right" size={18} color={colors.primary} /></Pressable>)}</View>}
           {notice ? <Text style={[styles.notice, { color: colors.warning }]}>{notice}</Text> : null}
-          <Pressable onPress={signIn} disabled={busy} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary }, (pressed || busy) && styles.pressed]}>{busy ? <ActivityIndicator color={colors.background} /> : <Text style={[styles.buttonText, { color: colors.background }]}>Connect private workspace</Text>}</Pressable>
+          {!candidate ? <Pressable onPress={signIn} disabled={busy} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary }, (pressed || busy) && styles.pressed]}>{busy ? <ActivityIndicator color={colors.background} /> : <Text style={[styles.buttonText, { color: colors.background }]}>Continue securely</Text>}</Pressable> : <Pressable onPress={() => { setCandidate(null); setNotice(null); }} disabled={busy} style={({ pressed }) => [styles.reset, { borderColor: colors.border }, pressed && styles.pressed]}><Text style={[styles.resetText, { color: colors.foreground }]}>Use another invitation</Text></Pressable>}
         </CreatorCard>
         <Text style={[styles.footer, { color: colors.muted }]}>Need access? A developer can issue or revoke pilot invitations, but cannot edit, approve, or publish your media.</Text>
       </View>
@@ -55,4 +69,4 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({ content: { paddingTop: 16, gap: 16 }, header: { flexDirection: "row", alignItems: "center", gap: 12 }, back: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, title: { marginTop: 4, fontSize: 23, fontWeight: "800" }, card: { gap: 10 }, copy: { fontSize: 14, lineHeight: 21 }, label: { marginTop: 2, fontSize: 14, fontWeight: "800" }, input: { height: 50, borderWidth: 1, borderRadius: 14, paddingHorizontal: 13, fontSize: 16 }, notice: { fontSize: 13, lineHeight: 19, fontWeight: "700" }, button: { height: 53, borderRadius: 16, alignItems: "center", justifyContent: "center", marginTop: 5 }, buttonText: { fontSize: 16, fontWeight: "800" }, footer: { fontSize: 13, lineHeight: 19, paddingHorizontal: 4 }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] } });
+const styles = StyleSheet.create({ content: { paddingTop: 16, gap: 16 }, header: { flexDirection: "row", alignItems: "center", gap: 12 }, back: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, title: { marginTop: 4, fontSize: 23, fontWeight: "800" }, card: { gap: 10 }, copy: { fontSize: 14, lineHeight: 21 }, label: { marginTop: 2, fontSize: 14, fontWeight: "800" }, input: { height: 50, borderWidth: 1, borderRadius: 14, paddingHorizontal: 13, fontSize: 16 }, notice: { fontSize: 13, lineHeight: 19, fontWeight: "700" }, button: { height: 53, borderRadius: 16, alignItems: "center", justifyContent: "center", marginTop: 5 }, buttonText: { fontSize: 16, fontWeight: "800" }, workspaceList: { gap: 8 }, workspace: { minHeight: 62, borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }, workspaceName: { fontSize: 15, fontWeight: "800" }, workspaceMeta: { marginTop: 3, fontSize: 12, fontWeight: "600" }, reset: { height: 46, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" }, resetText: { fontSize: 14, fontWeight: "800" }, footer: { fontSize: 13, lineHeight: 19, paddingHorizontal: 4 }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] } });
