@@ -8,6 +8,8 @@ import { buildReachPlan } from '../src/lib/reach-plan.js';
 import { decryptToken, encryptToken } from '../src/lib/token-crypto.js';
 import { getPlatformCapability } from '../src/lib/platform-capabilities.js';
 import { buildExperimentScorecard } from '../src/lib/experiment-scorecard.js';
+import { verifyPlatformWebhook } from '../src/lib/platform-webhook-security.js';
+import { createHmac } from 'node:crypto';
 
 async function main() {
   const plan = buildGrowthExperimentPlan({
@@ -31,6 +33,15 @@ async function main() {
   assert.equal(decryptToken(encryptedToken, 'test-encryption-key'), 'creator-access-token');
   assert.equal(getPlatformCapability('tiktok')?.officialPublishing, 'direct_post');
   assert.equal(getPlatformCapability('facebook')?.readiness, 'connector_required');
+  const webhookSecret = 'a'.repeat(32);
+  process.env.TIKTOK_WEBHOOK_SECRET = webhookSecret;
+  const webhookPayload = '{"event":"video.publish.complete"}';
+  const webhookSignature = `sha256=${createHmac('sha256', webhookSecret).update(webhookPayload).digest('hex')}`;
+  assert.equal(verifyPlatformWebhook({ platform: 'tiktok', payload: webhookPayload, signature: webhookSignature, timestamp: '1724673600', now: new Date('2024-08-26T12:00:00Z') }).valid, true);
+  assert.equal(verifyPlatformWebhook({ platform: 'tiktok', payload: webhookPayload, signature: 'sha256=deadbeef', timestamp: '1724673600', now: new Date('2024-08-26T12:00:00Z') }).reason, 'signature_invalid');
+  assert.equal(verifyPlatformWebhook({ platform: 'tiktok', payload: webhookPayload, signature: webhookSignature, timestamp: '1724670000', now: new Date('2024-08-26T12:00:00Z') }).reason, 'timestamp_out_of_window');
+  delete process.env.TIKTOK_WEBHOOK_SECRET;
+  assert.equal(verifyPlatformWebhook({ platform: 'tiktok', payload: webhookPayload, signature: webhookSignature }).reason, 'provider_webhook_not_configured');
   const scorecard = buildExperimentScorecard({
     objective: 'retention',
     variants: [{ id: 'variant-1', platform: 'tiktok', metrics: [{ scheduledPostId: 'post-1', completionRate: 0.55, recordedAt: '2026-08-25T10:00:00Z' }, { scheduledPostId: 'post-1', completionRate: 0.65, recordedAt: '2026-08-25T11:00:00Z' }] }],
@@ -160,6 +171,11 @@ async function main() {
   assert.match(accountRoute, /app\.get\('\/capabilities'/);
   assert.match(accountRoute, /Official .* connector is not configured yet/);
   assert.doesNotMatch(accountRoute, /return c\.json\(\{ success: true, message: 'Token refreshed'/);
+
+  const webhookRoute = await readFile(new URL('../src/routes/webhooks.ts', import.meta.url), 'utf8');
+  assert.match(webhookRoute, /verifyPlatformWebhook/);
+  assert.match(webhookRoute, /Invalid platform webhook signature/);
+  assert.match(webhookRoute, /no certified connector processor is configured/);
 
   const publisherWorker = await readFile(new URL('../../../workers/processor/src/publisher.js', import.meta.url), 'utf8');
   assert.match(publisherWorker, /official_connector_required/);

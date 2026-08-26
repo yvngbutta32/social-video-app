@@ -8,6 +8,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import type { Variables } from '../index.js';
 import { decideRetry, type RetryPolicy } from '../lib/reliability.js';
+import { verifyPlatformWebhook, SUPPORTED_PLATFORM_WEBHOOKS } from '../lib/platform-webhook-security.js';
 
 const webhookSchema = z.object({
   name: z.string().min(1).max(100),
@@ -417,16 +418,27 @@ export function createWebhookRoutes() {
     }
   });
 
-  // Public endpoint for platform webhooks (no auth required)
+  // Public endpoint for official provider callbacks. A verified delivery is never treated as processed until a certified connector owns it.
   app.post('/platform/:platform', async (c: any) => {
-    const platform = c.req.param('platform');
-    const signature = c.req.header('x-signature') || c.req.header('x-hub-signature-256');
+    const platform = c.req.param('platform').toLowerCase();
+    if (!SUPPORTED_PLATFORM_WEBHOOKS.includes(platform as (typeof SUPPORTED_PLATFORM_WEBHOOKS)[number])) {
+      throw new HTTPException(404, { message: 'Unsupported platform webhook.' });
+    }
+
     const body = await c.req.text();
-    
-    // TODO: Verify signature, process platform webhook
-    // This would handle callbacks from TikTok, Instagram, YouTube, etc.
-    
-    return c.json({ success: true });
+    const signature = c.req.header('x-signature') || c.req.header('x-hub-signature-256');
+    const timestamp = c.req.header('x-webhook-timestamp') || c.req.header('x-timestamp');
+    const verification = verifyPlatformWebhook({ platform, payload: body, signature, timestamp });
+
+    if (!verification.configured) {
+      throw new HTTPException(503, { message: `Official ${platform} webhook verification is not configured.` });
+    }
+    if (!verification.valid) {
+      throw new HTTPException(401, { message: 'Invalid platform webhook signature.' });
+    }
+
+    // Do not acknowledge a provider event as processed until its official connector maps it to a creator-owned account and durable state transition.
+    throw new HTTPException(501, { message: `Verified ${platform} webhook received, but no certified connector processor is configured.` });
   });
 
   return app;

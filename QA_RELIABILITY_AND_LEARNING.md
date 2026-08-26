@@ -127,3 +127,9 @@ The response remains explicit: a connected destination is not enough for approva
 The processor now persists structured progress under each video’s `metadata.processing` record. It reports initialization, active platform rendering, platform completion, deduplicated-output completion, final readiness, and failure state with phase, percentage, platform count, timestamps, and retryability context. This gives the creator UI a truthful basis for progress and recovery messaging while preserving existing FFmpeg and MinIO behavior.
 
 The progress update is workspace-safe through the video ID already authorized by the queued processing contract. Processor syntax checks, Growth/Pilot/Platform contracts, API type-check/build, and web type-check/build passed.
+
+## Strict official platform webhook boundary checkpoint
+
+The public provider callback endpoint no longer returns a false success for unverified or unprocessed events. TikTok, Instagram, and YouTube callbacks now require a configured deployment secret (environment or secret file), HMAC-SHA256 verification with timing-safe comparison, and optional five-minute timestamp replay protection. Unsupported platforms are rejected, and even a verified callback returns an explicit not-implemented response until a certified connector maps it to a creator-owned account and durable delivery or metric transition.
+
+The regression suite covers valid signed payloads, invalid signatures, stale timestamps, absent configuration, and public-route security messaging. API/web builds and processor syntax validation passed.
