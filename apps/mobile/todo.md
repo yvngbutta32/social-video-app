@@ -46,3 +46,6 @@
 - [x] Verify the self-owned adaptation-recipe mutation contract and revision semantics.
 - [x] Synchronize Edit Lab recipe revisions to verified creator-authorized adaptations while retaining local drafts on unavailable deployments.
 - [ ] Validate server-backed recipe save and renderer dispatch against a deployed creator workspace before release.
+- [x] Verify the server adaptation render-state and artifact-status contract for native lifecycle feedback.
+- [x] Add a refreshable native render lifecycle view after server-backed Edit Lab saves.
+- [ ] Validate native render lifecycle refresh and artifact review against a deployed renderer before release.
