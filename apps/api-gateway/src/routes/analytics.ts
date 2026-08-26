@@ -660,34 +660,16 @@ export function createAnalyticsRoutes() {
     return c.json({ data: contentPerformance });
   });
 
-  app.post('/export', zValidator('json', exportSchema), async (c: any) => {
-    const query = c.req.valid('json');
-    const user = c.get('user');
-    
-    // TODO: Implement actual export job queue
-    const exportId = `export_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    return c.json({ 
-      success: true, 
-      exportId,
-      downloadUrl: `/api/v1/analytics/export/${exportId}/download`,
-    });
+  app.post('/export', zValidator('json', exportSchema), async () => {
+    throw new HTTPException(503, { message: 'Analytics export is not available until a durable export queue, private artifact store, and authorized download flow are implemented.' });
   });
 
-  app.get('/export/:id/status', async (c: any) => {
-    const id = c.req.param('id');
-    const user = c.get('user');
-    
-    // TODO: Check actual export status
-    return c.json({ data: { id, status: 'completed', downloadUrl: `/api/v1/analytics/export/${id}/download` } });
+  app.get('/export/:id/status', async () => {
+    throw new HTTPException(503, { message: 'Analytics export status is not available because no export job has been created.' });
   });
 
-  app.get('/export/:id/download', async (c: any) => {
-    const id = c.req.param('id');
-    const user = c.get('user');
-    
-    // TODO: Implement actual file download
-    return c.json({ message: 'File download would start here' });
+  app.get('/export/:id/download', async () => {
+    throw new HTTPException(503, { message: 'Analytics export download is not available because no export artifact exists.' });
   });
 
   app.get('/realtime', async (c: any) => {

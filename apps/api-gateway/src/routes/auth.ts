@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { sign, verify } from 'hono/jwt';
-import { setCookie, deleteCookie } from 'hono/cookie';
+import { setCookie, deleteCookie, getCookie } from 'hono/cookie';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
@@ -23,7 +23,7 @@ const loginSchema = z.object({
 });
 
 const refreshSchema = z.object({
-  refreshToken: z.string(),
+  refreshToken: z.string().optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -220,7 +220,9 @@ export function createAuthRoutes() {
   });
 
   app.post('/refresh', zValidator('json', refreshSchema), async (c: any) => {
-    const { refreshToken } = c.req.valid('json');
+    const { refreshToken: bodyRefreshToken } = c.req.valid('json');
+    const refreshToken = bodyRefreshToken || getCookie(c, 'refreshToken');
+    if (!refreshToken) throw new HTTPException(401, { message: 'Refresh token is required' });
     
     try {
       const payload = await verify(refreshToken, c.env.JWT_SECRET, 'HS256');
@@ -290,19 +292,12 @@ export function createAuthRoutes() {
     return c.json({ success: true, message: 'Password changed' });
   });
 
-  app.post('/forgot-password', zValidator('json', forgotPasswordSchema), async (c: any) => {
-    const body = c.req.valid('json');
-    
-    // TODO: Generate reset token, send email
-    // For security, always return success even if email doesn't exist
-    return c.json({ success: true, message: 'If the email exists, a reset link has been sent' });
+  app.post('/forgot-password', zValidator('json', forgotPasswordSchema), async () => {
+    throw new HTTPException(503, { message: 'Password recovery is not configured. Contact the private pilot administrator for access recovery.' });
   });
 
-  app.post('/reset-password', zValidator('json', resetPasswordSchema), async (c: any) => {
-    const body = c.req.valid('json');
-    
-    // TODO: Verify token, hash new password, update
-    return c.json({ success: true, message: 'Password reset successful' });
+  app.post('/reset-password', zValidator('json', resetPasswordSchema), async () => {
+    throw new HTTPException(503, { message: 'Password reset is not configured because no verified recovery token service is available.' });
   });
 
   app.get('/me', async (c: any) => {
@@ -338,16 +333,12 @@ export function createAuthRoutes() {
     return c.json({ data: fullUser });
   });
 
-  app.post('/verify-email', async (c: any) => {
-    const user = c.get('user');
-    
-    // TODO: Send verification email
-    return c.json({ success: true, message: 'Verification email sent' });
+  app.post('/verify-email', async () => {
+    throw new HTTPException(503, { message: 'Email verification is not configured because no verified email-delivery service is available.' });
   });
 
-  app.post('/verify-email/confirm', async (c: any) => {
-    // TODO: Verify token from email
-    return c.json({ success: true, message: 'Email verified' });
+  app.post('/verify-email/confirm', async () => {
+    throw new HTTPException(503, { message: 'Email confirmation is not configured because no verified token service is available.' });
   });
 
   return app;

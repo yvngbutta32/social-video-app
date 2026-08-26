@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
+
+type JsonRecord = Record<string, unknown>;
 
 interface WebSocketMessage {
   type: string;
-  payload: Record<string, any>;
+  payload: JsonRecord;
   timestamp: string;
 }
 
@@ -27,92 +29,98 @@ interface SessionData {
   };
 }
 
+type RuntimeWindow = Window & { __NEXT_PUBLIC_WS_URL__?: string };
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function parseMessage(raw: unknown): WebSocketMessage | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed) || typeof parsed.type !== 'string' || !isRecord(parsed.payload) || typeof parsed.timestamp !== 'string') return null;
+    return { type: parsed.type, payload: parsed.payload, timestamp: parsed.timestamp };
+  } catch {
+    return null;
+  }
+}
+
+function socketBaseUrl(path: string) {
+  const configuredUrl = typeof window === 'undefined' ? undefined : (window as RuntimeWindow).__NEXT_PUBLIC_WS_URL__;
+  return `${configuredUrl || 'ws://localhost:3003'}${path}`;
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  return isRecord(value) && typeof value[key] === 'string' ? value[key] : undefined;
+}
+
 export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
   const { data: session } = useSession() as { data: SessionData | null };
   const wsRef = useRef<WebSocket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempts = useRef(0);
+  const connectRef = useRef<() => void>(() => undefined);
+  const [isConnected, setIsConnected] = useState(false);
+  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const maxReconnectAttempts = 10;
-
-  const {
-    onMessage,
-    onConnect,
-    onDisconnect,
-    onError,
-    reconnect = true,
-    reconnectInterval = 3000,
-  } = options;
+  const { onMessage, onConnect, onDisconnect, onError, reconnect = true, reconnectInterval = 3000 } = options;
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
     const token = session?.accessToken || '';
-    const wsUrl = `${url}?token=${encodeURIComponent(token)}`;
-    
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    const ws = new WebSocket(`${url}?token=${encodeURIComponent(token)}`);
+    wsRef.current = ws;
 
-      ws.onopen = () => {
-        setIsConnected(true);
-        reconnectAttempts.current = 0;
-        onConnect?.();
-      };
+    ws.onopen = () => {
+      setIsConnected(true);
+      reconnectAttempts.current = 0;
+      onConnect?.();
+    };
 
-      ws.onmessage = (event) => {
-        try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          setLastMessage(message);
-          onMessage?.(message);
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
-        }
-      };
+    ws.onmessage = (event) => {
+      const message = parseMessage(event.data);
+      if (!message) {
+        console.warn('Ignored malformed WebSocket message.');
+        return;
+      }
+      setLastMessage(message);
+      onMessage?.(message);
+    };
 
-      ws.onclose = () => {
-        setIsConnected(false);
-        onDisconnect?.();
+    ws.onclose = () => {
+      setIsConnected(false);
+      onDisconnect?.();
+      if (!reconnect || reconnectAttempts.current >= maxReconnectAttempts) return;
+      reconnectAttempts.current += 1;
+      const delay = Math.min(reconnectInterval * Math.pow(1.5, reconnectAttempts.current - 1), 30000);
+      reconnectTimeoutRef.current = setTimeout(() => connectRef.current(), delay);
+    };
 
-        if (reconnect && reconnectAttempts.current < maxReconnectAttempts) {
-          reconnectAttempts.current++;
-          const delay = Math.min(reconnectInterval * Math.pow(1.5, reconnectAttempts.current - 1), 30000);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, delay);
-        }
-      };
-
-      ws.onerror = (error) => {
-        onError?.(error);
-      };
-    } catch (err) {
-      console.error('WebSocket connection error:', err);
-      onError?.(err as any);
-    }
+    ws.onerror = (event) => onError?.(event);
   }, [url, session?.accessToken, onMessage, onConnect, onDisconnect, onError, reconnect, reconnectInterval]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    
     if (wsRef.current) {
+      wsRef.current.onclose = null;
       wsRef.current.close();
       wsRef.current = null;
     }
     setIsConnected(false);
   }, []);
 
-  const send = useCallback((message: Record<string, any>) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
-      return true;
-    }
-    return false;
+  const send = useCallback((message: JsonRecord) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return false;
+    wsRef.current.send(JSON.stringify(message));
+    return true;
   }, []);
 
   useEffect(() => {
@@ -120,84 +128,60 @@ export function useWebSocket(url: string, options: UseWebSocketOptions = {}) {
     return () => disconnect();
   }, [connect, disconnect]);
 
-  return {
-    isConnected,
-    lastMessage,
-    send,
-    connect,
-    disconnect,
-  };
+  return { isConnected, lastMessage, send, connect, disconnect };
 }
 
-// Specialized hooks for different real-time features
 export function useJobUpdates(jobId?: string) {
-  const [jobStatus, setJobStatus] = useState<Record<string, any> | null>(null);
-  const [jobProgress, setJobProgress] = useState<number>(0);
-
-  const { isConnected, lastMessage } = useWebSocket(
-    `${(typeof window !== 'undefined' ? (window as any).__NEXT_PUBLIC_WS_URL__ : '') || 'ws://localhost:3003'}/ws/jobs`,
-    {
-      onMessage: (message) => {
-        if (message.type === 'job_update' && (!jobId || message.payload.jobId === jobId)) {
-          setJobStatus(message.payload.status);
-          setJobProgress(message.payload.progress || 0);
-        }
-      },
-    }
-  );
-
+  const [jobStatus, setJobStatus] = useState<JsonRecord | null>(null);
+  const [jobProgress, setJobProgress] = useState(0);
+  const { isConnected } = useWebSocket(socketBaseUrl('/ws/jobs'), {
+    onMessage: (message) => {
+      if (message.type !== 'job_update' || (jobId && stringField(message.payload, 'jobId') !== jobId)) return;
+      const status = message.payload.status;
+      setJobStatus(isRecord(status) ? status : null);
+      const progress = message.payload.progress;
+      setJobProgress(typeof progress === 'number' ? progress : 0);
+    },
+  });
   return { isConnected, jobStatus, jobProgress };
 }
 
 export function useMetricsUpdates(platform?: string) {
-  const [metrics, setMetrics] = useState<Record<string, any>[]>([]);
-
-  const { isConnected, lastMessage } = useWebSocket(
-    `${(typeof window !== 'undefined' ? (window as any).__NEXT_PUBLIC_WS_URL__ : '') || 'ws://localhost:3003'}/ws/metrics`,
-    {
-      onMessage: (message) => {
-        if (message.type === 'metrics_update') {
-          const newMetrics = message.payload.metrics;
-          if (!platform || newMetrics.platform === platform) {
-            setMetrics((prev: Record<string, any>[]) => {
-              const exists = prev.find((m: Record<string, any>) => m.id === newMetrics.id);
-              if (exists) {
-                return prev.map((m: Record<string, any>) => m.id === newMetrics.id ? newMetrics : m);
-              }
-              return [newMetrics, ...prev.slice(0, 99)];
-            });
-          }
-        }
-      },
-    }
-  );
-
+  const [metrics, setMetrics] = useState<JsonRecord[]>([]);
+  const { isConnected } = useWebSocket(socketBaseUrl('/ws/metrics'), {
+    onMessage: (message) => {
+      if (message.type !== 'metrics_update' || !isRecord(message.payload.metrics)) return;
+      const metric = message.payload.metrics;
+      const metricId = stringField(metric, 'id');
+      const metricPlatform = stringField(metric, 'platform');
+      if (!metricId || (platform && metricPlatform !== platform)) return;
+      setMetrics((current) => {
+        const existing = current.some((item) => stringField(item, 'id') === metricId);
+        return existing ? current.map((item) => stringField(item, 'id') === metricId ? metric : item) : [metric, ...current.slice(0, 99)];
+      });
+    },
+  });
   return { isConnected, metrics };
 }
 
 export function useNotifications() {
-  const [notifications, setNotifications] = useState<Record<string, any>[]>([]);
+  const [notifications, setNotifications] = useState<JsonRecord[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-
-  const { isConnected, lastMessage } = useWebSocket(
-    `${(typeof window !== 'undefined' ? (window as any).__NEXT_PUBLIC_WS_URL__ : '') || 'ws://localhost:3003'}/ws/notifications`,
-    {
-      onMessage: (message) => {
-        if (message.type === 'notification') {
-          setNotifications((prev: Record<string, any>[]) => [message.payload, ...prev.slice(0, 49)]);
-          setUnreadCount((prev: number) => prev + 1);
-        }
-      },
-    }
-  );
+  const { isConnected } = useWebSocket(socketBaseUrl('/ws/notifications'), {
+    onMessage: (message) => {
+      if (message.type !== 'notification') return;
+      setNotifications((current) => [message.payload, ...current.slice(0, 49)]);
+      setUnreadCount((current) => current + 1);
+    },
+  });
 
   const markAsRead = useCallback((id: string) => {
-    setNotifications((prev: Record<string, any>[]) => prev.map((n: Record<string, any>) => n.id === id ? { ...n, read: true } : n));
-    setUnreadCount((prev: number) => Math.max(0, prev - 1));
+    setNotifications((current) => current.map((notification) => stringField(notification, 'id') === id ? { ...notification, read: true } : notification));
+    setUnreadCount((current) => Math.max(0, current - 1));
   }, []);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev: Record<string, any>[]) => prev.map((n: Record<string, any>) => ({ ...n, read: true })));
+    setNotifications((current) => current.map((notification) => ({ ...notification, read: true })));
     setUnreadCount(0);
   }, []);
 
@@ -205,28 +189,24 @@ export function useNotifications() {
 }
 
 export function useCampaignUpdates(campaignId?: string) {
-  const [campaign, setCampaign] = useState<Record<string, any> | null>(null);
-  const [posts, setPosts] = useState<Record<string, any>[]>([]);
-
-  const { isConnected, lastMessage } = useWebSocket(
-    `${(typeof window !== 'undefined' ? (window as any).__NEXT_PUBLIC_WS_URL__ : '') || 'ws://localhost:3003'}/ws/campaigns`,
-    {
-      onMessage: (message) => {
-        if (message.type === 'campaign_update' && (!campaignId || message.payload.campaignId === campaignId)) {
-          setCampaign(message.payload.campaign);
-        }
-        if (message.type === 'post_update' && (!campaignId || message.payload.campaignId === campaignId)) {
-          setPosts((prev: Record<string, any>[]) => {
-            const exists = prev.find((p: Record<string, any>) => p.id === message.payload.post.id);
-            if (exists) {
-              return prev.map((p: Record<string, any>) => p.id === message.payload.post.id ? message.payload.post : p);
-            }
-            return [message.payload.post, ...prev];
-          });
-        }
-      },
-    }
-  );
-
+  const [campaign, setCampaign] = useState<JsonRecord | null>(null);
+  const [posts, setPosts] = useState<JsonRecord[]>([]);
+  const { isConnected } = useWebSocket(socketBaseUrl('/ws/campaigns'), {
+    onMessage: (message) => {
+      if (campaignId && stringField(message.payload, 'campaignId') !== campaignId) return;
+      if (message.type === 'campaign_update') {
+        setCampaign(isRecord(message.payload.campaign) ? message.payload.campaign : null);
+      }
+      if (message.type === 'post_update' && isRecord(message.payload.post)) {
+        const post = message.payload.post;
+        const postId = stringField(post, 'id');
+        if (!postId) return;
+        setPosts((current) => {
+          const existing = current.some((item) => stringField(item, 'id') === postId);
+          return existing ? current.map((item) => stringField(item, 'id') === postId ? post : item) : [post, ...current];
+        });
+      }
+    },
+  });
   return { isConnected, campaign, posts };
 }

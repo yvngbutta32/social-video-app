@@ -208,7 +208,9 @@ export function createVideoRoutes() {
     return c.json({ data: video });
   });
 
-  app.post('/', zValidator('json', videoSchema), async (c: any) => {
+  app.post('/', zValidator('json', videoSchema), async () => {
+    throw new HTTPException(410, { message: 'Direct JSON video creation is retired. Upload creator-owned media through POST /api/v1/videos/upload so storage and processing are truthfully tracked.' });
+    /*
     const body = c.req.valid('json');
     const user = c.get('user');
     
@@ -254,6 +256,9 @@ export function createVideoRoutes() {
         createdAt: video.createdAt.toISOString() 
       } 
     }, 201);
+  });
+
+    */
   });
 
   app.patch('/:id', zValidator('json', updateVideoSchema), async (c: any) => {
@@ -319,7 +324,9 @@ export function createVideoRoutes() {
     return c.json({ success: true });
   });
 
-  app.post('/:id/publish', async (c: any) => {
+  app.post('/:id/publish', async () => {
+    throw new HTTPException(410, { message: 'Legacy direct publishing is retired. Create a creator-approved publish intent through /api/v1/publishing before official connector delivery.' });
+    /*
     const id = c.req.param('id');
     const user = c.get('user');
     
@@ -347,6 +354,9 @@ export function createVideoRoutes() {
     // await publishQueue.add('publish', { videoId: video.id, variantIds: video.variants.map(v => v.id) });
     
     return c.json({ success: true, message: 'Publish queued' });
+  });
+
+    */
   });
 
   app.post('/:id/duplicate', async (c: any) => {

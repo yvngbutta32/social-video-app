@@ -23,7 +23,6 @@ import {
   LayoutDashboard,
   LockKeyhole,
   MoreHorizontal,
-  PauseCircle,
   Plus,
   Search,
   ShieldCheck,

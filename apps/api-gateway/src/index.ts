@@ -6,7 +6,7 @@ import { prettyJSON } from 'hono/pretty-json';
 import { HTTPException } from 'hono/http-exception';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { jwt } from 'hono/jwt';
+import { verify } from 'hono/jwt';
 import pino from 'pino';
 
 import { createVideoRoutes } from './routes/videos.js';
@@ -60,22 +60,37 @@ app.get('/ready', async (c) => {
   }
 });
 
-const authMiddleware = jwt({
-  secret: (c: any) => c.env.JWT_SECRET,
-  alg: 'HS256',
-});
+const publicAuthPaths = new Set([
+  '/api/v1/auth/register',
+  '/api/v1/auth/login',
+  '/api/v1/auth/logout',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/forgot-password',
+  '/api/v1/auth/reset-password',
+  '/api/v1/auth/verify-email/confirm',
+]);
 
-app.use('/api/v1/*', authMiddleware, async (c, next) => {
-  const payload = c.get('jwtPayload');
-  if (!payload) {
-    throw new HTTPException(401, { message: 'Unauthorized' });
+const isPublicAuthPath = (path: string) => publicAuthPaths.has(path);
+
+app.use('/api/v1/*', async (c, next) => {
+  if (isPublicAuthPath(c.req.path)) return next();
+  const authorization = c.req.header('authorization');
+  if (!authorization?.startsWith('Bearer ')) throw new HTTPException(401, { message: 'Unauthorized' });
+  const secret = (c.env as Bindings | undefined)?.JWT_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new HTTPException(503, { message: 'Authentication is not configured.' });
+
+  try {
+    const payload = await verify(authorization.slice('Bearer '.length), secret, 'HS256');
+    if (typeof payload.sub !== 'string' || typeof payload.email !== 'string' || typeof payload.role !== 'string') {
+      throw new HTTPException(401, { message: 'Invalid authentication claims.' });
+    }
+    c.set('jwtPayload', payload);
+    c.set('user', { id: payload.sub, email: payload.email, role: payload.role });
+    await next();
+  } catch (error) {
+    if (error instanceof HTTPException) throw error;
+    throw new HTTPException(401, { message: 'Invalid authentication token.' });
   }
-  c.set('user', {
-    id: payload.sub as string,
-    email: payload.email as string,
-    role: payload.role as string,
-  });
-  await next();
 });
 
 app.route('/api/v1/auth', createAuthRoutes());

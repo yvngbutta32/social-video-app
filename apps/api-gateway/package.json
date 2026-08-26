@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test:pilot": "tsx scripts/verify-pilot-foundation.ts",
     "test:platform": "tsx scripts/verify-platform-contract.ts",
-    "test:growth": "tsx scripts/verify-growth-plan.ts"
+    "test:growth": "tsx scripts/verify-growth-plan.ts",
+    "test:auth-boundary": "tsx scripts/verify-auth-boundary.ts",
+    "test:truthful-boundaries": "tsx scripts/verify-truthful-boundaries.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

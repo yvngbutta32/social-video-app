@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { 
@@ -25,41 +24,41 @@ import {
 const features = [
   {
     icon: Zap,
-    title: 'Instant Amplification',
-    description: 'One-click distribution to 7+ platforms simultaneously. No manual posting, no platform switching.',
+    title: 'Creator-Controlled Distribution',
+    description: 'One source becomes a transparent, creator-approved plan for authorized platform destinations.',
   },
   {
     icon: Brain,
-    title: 'AI Video Optimization',
-    description: 'Local LLMs rewrite captions, select hashtags, generate thumbnails, and optimize for each platform\'s algorithm.',
+    title: 'Private Source Intelligence',
+    description: 'Self-hosted analysis identifies durable hooks, proof, and creative variables worth testing.',
   },
   {
     icon: Target,
-    title: 'Precision Targeting',
-    description: 'Audience intelligence builds lookalike audiences from your best performers. Retarget engaged viewers automatically.',
+    title: 'Controlled Experiments',
+    description: 'Platform-native variants test a limited set of creative decisions and preserve creator approval.',
   },
   {
     icon: BarChart3,
-    title: 'Real-Time Analytics',
-    description: 'Unified dashboard with cross-platform metrics. Viral coefficient tracking, retention curves, revenue attribution.',
+    title: 'Evidence-Based Learning',
+    description: 'Creator-specific baselines and cautious scorecards distinguish directional signals from decision-ready evidence.',
   },
   {
     icon: Globe,
-    title: 'Zero API Costs',
-    description: 'Self-hosted browser automation bypasses official APIs. No rate limits, no monthly fees, no platform dependency.',
+    title: 'Official Platform Boundaries',
+    description: 'Publishing and metrics remain creator-authorized official connection workflows, never feed-control claims.',
   },
   {
     icon: Shield,
-    title: 'Full Data Ownership',
-    description: 'Your content, your data, your infrastructure. GDPR/CCPA compliant by default. Export anytime.',
+    title: 'Self-Owned Foundation',
+    description: 'Private workspaces, self-hosted storage, processing, and local intelligence keep core creator data under platform control.',
   },
 ];
 
 const stats = [
-  { value: '7+', label: 'Platforms Supported' },
-  { value: '0', label: 'API Costs/Month' },
-  { value: '99.9%', label: 'Uptime SLA' },
-  { value: '<5min', label: 'Avg Setup Time' },
+  { value: '6', label: 'Declared destinations' },
+  { value: '100%', label: 'Creator approval required' },
+  { value: 'Private', label: 'Selected-creator access' },
+  { value: 'Evidence', label: 'Before winner claims' },
 ];
 
 const platforms = [
@@ -117,18 +116,17 @@ export default function HomePage() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20 mb-8 text-sm font-medium">
               <Sparkles className="h-4 w-4" />
-              <span>Version 2.0 — Now with Local AI & Browser Automation</span>
+              <span>Private creator growth operating system</span>
             </div>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-              Amplify Your Videos
+              Turn one source into
               <br />
-              <span className="gradient-text">Across Every Platform</span>
+              <span className="gradient-text">better creator-led experiments.</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
-              One upload. AI-optimized for every platform. Distributed automatically. 
-              Real-time analytics. Zero API costs. Self-hosted on your infrastructure.
+              Upload private source content, prepare transparent platform-native adaptations, approve every delivery step, and learn from real creator outcomes.
             </p>
 
             <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 justify-center max-w-md mx-auto mb-16">
@@ -161,7 +159,7 @@ export default function HomePage() {
             </form>
 
             <p className="text-sm text-muted-foreground">
-              Self-hosted • MIT Licensed • No vendor lock-in • Deploy in 5 minutes
+              Invite-only • Creator-approved • Self-owned core infrastructure • No virality guarantees
             </p>
           </div>
 
@@ -194,7 +192,7 @@ export default function HomePage() {
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 max-w-6xl mx-auto">
-            {platforms.map((platform, i) => (
+            {platforms.map((platform) => (
               <Link
                 key={platform.name}
                 href="#"
