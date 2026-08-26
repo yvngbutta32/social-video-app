@@ -207,3 +207,16 @@ Scene-aware candidates are anchored at persisted scene starts and constrained to
 Growth Studio now shows these drafts in the Advanced Edit Lab. Selecting one pre-fills the trim inputs and marks it as the range for the next render. On save, the browser sends the opaque candidate ID, but the server independently recomputes candidates from persisted source evidence, rejects stale or forged IDs, writes `selectedClipCandidateId` to the variant metadata, preserves `scene_candidate` recipe provenance, and queues the same non-destructive private renderer. Direct manual ranges remain available and retain `creator_custom` provenance.
 
 The `test:clip-candidates` quality gate proves scene anchoring, candidate duration limits, caption counts, fallback honesty, evidence extraction, and scene-candidate recipe provenance. The full web/API/intelligence/processor validation and production dependency audits passed. Runtime scene detection, rendering, and review of a real uploaded source remain deployment-gated.
+
+
+## Creator-visible processing diagnostics and bounded retry checkpoint
+
+The private source-processing workflow now exposes a normalized diagnostic contract through `GET /api/v1/videos/:id/processing-diagnostics`. The endpoint first resolves the requested source to its workspace and requires workspace access. It returns durable state, phase, percentage, platform totals, a safe issue classification, a bounded retry budget, and creator-readable recovery guidance. Raw infrastructure error strings are not returned to the creator.
+
+The diagnostic classifier distinguishes queued, processing, ready, failed, and dispatch-failed sources. Failed conditions are classified as processing-service, private-storage, media-validation, rendering, analysis, or generic processing failures. Classification is used only to present safe recovery guidance; it does not claim a content or growth outcome.
+
+Only a creator with workspace access can call `POST /api/v1/videos/:id/retry-processing`. A retry is allowed only for failed or dispatch-failed work and is capped at three manual requests. The route reuses the deterministic existing processing job identity, preserves the original source media, increments durable retry metadata, and reports a truthful `503` if the processing queue cannot be reached. Platform-owner oversight remains read-only for this mutation.
+
+Growth Studio now polls source-specific diagnostics while processing is incomplete. It explains queued, active, and failed states in creator language and offers a visible retry action only while budget remains. The UI does not expose raw queue, storage, or FFmpeg details.
+
+The `test:processing-diagnostics` gate proves state normalization, storage-versus-queue classification precedence, retry budgets, failure guidance, and ready-state behavior. Full web/API/intelligence/processor validation and production dependency audits passed. Live queue recovery remains staging-gated until Redis, MinIO, PostgreSQL, FFmpeg, and the worker are running together on a persistent deployment target.

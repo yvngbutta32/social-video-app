@@ -16,7 +16,8 @@
     "test:analytics-integrity": "tsx scripts/verify-analytics-integrity.ts",
     "test:adaptations": "tsx scripts/verify-adaptation-recipes.ts",
     "test:artifact-preview": "tsx scripts/verify-artifact-preview.ts",
-    "test:clip-candidates": "tsx scripts/verify-clip-candidates.ts"
+    "test:clip-candidates": "tsx scripts/verify-clip-candidates.ts",
+    "test:processing-diagnostics": "tsx scripts/verify-processing-diagnostics.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

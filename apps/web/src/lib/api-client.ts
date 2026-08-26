@@ -196,3 +196,24 @@ export type ClipCandidateResponse = {
 export function getClipCandidates(videoId: string, platform: string, accessToken?: string) {
   return apiRequest<{ data: ClipCandidateResponse }>(`/growth/clip-candidates/${videoId}?platform=${encodeURIComponent(platform)}`, accessToken);
 }
+
+
+export type ProcessingDiagnostic = {
+  state: 'queued' | 'processing' | 'ready' | 'failed' | 'dispatch_failed' | 'unknown';
+  phase: string | null;
+  percent: number | null;
+  platform: string | null;
+  completedPlatforms: number | null;
+  totalPlatforms: number | null;
+  retry: { allowed: boolean; manualRetryCount: number; remainingManualRetries: number; recommendedAction: string };
+  issue: { code: string; message: string };
+  safeguards: string[];
+};
+
+export function getProcessingDiagnostics(videoId: string, accessToken?: string) {
+  return apiRequest<{ data: { videoId: string; updatedAt: string; diagnostic: ProcessingDiagnostic } }>(`/videos/${videoId}/processing-diagnostics`, accessToken);
+}
+
+export function retryVideoProcessing(videoId: string, accessToken?: string) {
+  return apiRequest<{ data: { videoId: string; manualRetryCount: number; nextStep: string } }>(`/videos/${videoId}/retry-processing`, accessToken, { method: 'POST' });
+}

@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
-import { assertPublishingAllowed } from '../lib/pilot-access.js';
+import { assertPublishingAllowed, requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 import { uploadSource } from '../lib/source-storage.js';
-import { enqueueVideoProcessing } from '../lib/processing-dispatch.js';
+import { enqueueVideoProcessing } from '../lib/processing-dispatch';
+import { buildProcessingDiagnostic } from '../lib/processing-diagnostics.js';
 
 const videoSchema = z.object({
   title: z.string().min(1).max(200),
@@ -167,6 +168,68 @@ export function createVideoRoutes() {
     } catch (error) {
       await prisma.video.update({ where: { id: video.id }, data: { metadata: { sourceType: 'creator-upload', processingState: 'dispatch_failed', processingError: error instanceof Error ? error.message : 'Processing dispatch failed' } } }).catch(() => undefined);
       throw new HTTPException(503, { message: 'Source was stored privately, but local processing could not be queued. Retry from the creator workspace.' });
+    }
+  });
+
+  app.get('/:id/processing-diagnostics', async (c: any) => {
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const video = await prisma.video.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true, status: true, metadata: true, updatedAt: true },
+    });
+    if (!video) throw new HTTPException(404, { message: 'Video not found' });
+    await requireWorkspaceAccess(user, video.workspaceId);
+    return c.json({ data: { videoId: video.id, updatedAt: video.updatedAt.toISOString(), diagnostic: buildProcessingDiagnostic(video) } });
+  });
+
+  app.post('/:id/retry-processing', async (c: any) => {
+    const user = c.get('user');
+    const id = c.req.param('id');
+    const video = await prisma.video.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true, status: true, metadata: true },
+    });
+    if (!video) throw new HTTPException(404, { message: 'Video not found' });
+    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+
+    const diagnostic = buildProcessingDiagnostic(video);
+    if (!diagnostic.retry.allowed) {
+      throw new HTTPException(409, { message: diagnostic.retry.recommendedAction });
+    }
+
+    const metadata = video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata)
+      ? video.metadata as Record<string, unknown>
+      : {};
+    try {
+      const processing = await enqueueVideoProcessing(video.id);
+      const retryCount = diagnostic.retry.manualRetryCount + 1;
+      await prisma.video.update({
+        where: { id: video.id },
+        data: {
+          status: 'processing',
+          metadata: {
+            ...metadata,
+            processingState: 'queued',
+            processingJobId: processing.jobId,
+            processingQueuedAt: new Date().toISOString(),
+            manualRetryCount: retryCount,
+            lastManualRetryAt: new Date().toISOString(),
+            processingError: null,
+          },
+        },
+      });
+      return c.json({
+        data: {
+          videoId: video.id,
+          processing,
+          manualRetryCount: retryCount,
+          nextStep: 'processing_requeued',
+          safeguards: ['The original source remains unchanged. Review the new progress state before attempting another retry.'],
+        },
+      });
+    } catch (error) {
+      throw new HTTPException(503, { message: 'Processing could not be requeued. Your source remains private and unchanged; retry after the processing service is available.' });
     }
   });
 
