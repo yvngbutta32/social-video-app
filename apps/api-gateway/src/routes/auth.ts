@@ -41,6 +41,10 @@ const resetPasswordSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+const workspaceSelectionSchema = z.object({
+  workspaceId: z.string().uuid(),
+});
+
 const refreshTokenLifetimeSeconds = 60 * 60 * 24 * 30;
 
 function createRefreshToken(userId: string, secret: string) {
@@ -332,6 +336,29 @@ export function createAuthRoutes() {
     }
     
     return c.json({ data: fullUser });
+  });
+
+  app.post('/workspace-selection', zValidator('json', workspaceSelectionSchema), async (c: any) => {
+    const user = c.get('user');
+    const { workspaceId } = c.req.valid('json');
+    const requestedWorkspaceId = c.req.header('x-workspace-id');
+    if (!requestedWorkspaceId || requestedWorkspaceId !== workspaceId) {
+      throw new HTTPException(400, { message: 'Select the same authorized workspace in the request scope and event payload.' });
+    }
+    const membership = await prisma.workspaceMember.findFirst({ where: { userId: user.id, workspaceId }, select: { id: true } });
+    if (!membership) throw new HTTPException(403, { message: 'This workspace is not authorized for the current session.' });
+    await prisma.auditLog.create({
+      data: {
+        workspaceId,
+        userId: user.id,
+        action: 'workspace_selected',
+        resourceType: 'workspace',
+        resourceId: workspaceId,
+        newValues: { workspaceId, client: c.req.header(NATIVE_CLIENT_HEADER) === 'native' ? 'native' : 'web' },
+        userAgent: c.req.header('user-agent')?.slice(0, 512) ?? null,
+      },
+    });
+    return c.json({ success: true, data: { workspaceId } });
   });
 
   app.post('/verify-email', async () => {

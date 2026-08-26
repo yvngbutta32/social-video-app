@@ -85,6 +85,7 @@ export async function selectViralBoostWorkspace(workspaceId: string) {
   if (!session.accessToken || !session.refreshToken) throw new Error("Connect an invited creator session before choosing a workspace.");
   assertAuthorizedWorkspace(await getAuthorizedWorkspaces(), workspaceId);
   await saveSecureSession(session.accessToken, session.refreshToken, workspaceId);
+  void viralBoostRequest("/api/v1/auth/workspace-selection", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workspaceId }) }).catch(() => undefined);
 }
 
 export async function signOutOfViralBoost() {

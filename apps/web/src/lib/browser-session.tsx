@@ -40,6 +40,16 @@ function persistWorkspaceSelection(workspaceId: string | null) {
   else window.sessionStorage.removeItem(WORKSPACE_SELECTION_KEY);
 }
 
+function recordWorkspaceSelection(accessToken: string | null, workspaceId: string) {
+  if (!accessToken) return;
+  void fetch('/api/v1/auth/workspace-selection', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Authorization: `Bearer ${accessToken}`, 'content-type': 'application/json', 'x-workspace-id': workspaceId },
+    body: JSON.stringify({ workspaceId }),
+  }).catch(() => undefined);
+}
+
 async function jsonRequest(path: string, init: RequestInit) {
   const response = await fetch(path, { ...init, credentials: 'include', headers: { 'content-type': 'application/json', ...init.headers } });
   const payload = await response.json().catch(() => ({})) as AuthPayload;
@@ -128,8 +138,9 @@ export function BrowserSessionProvider({ children }: PropsWithChildren) {
     if (workspaces.some((workspace) => workspace.id === nextWorkspaceId)) {
       setWorkspaceId(nextWorkspaceId);
       persistWorkspaceSelection(nextWorkspaceId);
+      recordWorkspaceSelection(accessToken, nextWorkspaceId);
     }
-  }, [workspaces]);
+  }, [accessToken, workspaces]);
 
   const value = useMemo(() => ({ accessToken: accessToken ?? undefined, user, status, workspaces, workspaceId: workspaceId ?? undefined, selectWorkspace, signIn, signOut, refresh }), [accessToken, user, status, workspaces, workspaceId, selectWorkspace, signIn, signOut, refresh]);
   return <BrowserSessionContext.Provider value={value}>{children}</BrowserSessionContext.Provider>;

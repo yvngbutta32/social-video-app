@@ -11,6 +11,7 @@ import type { Variables } from '../index.js';
 import { decideRetry, type RetryPolicy } from '../lib/reliability.js';
 import { verifyPlatformWebhook, SUPPORTED_PLATFORM_WEBHOOKS } from '../lib/platform-webhook-security.js';
 import { decryptToken, encryptToken, isEncryptedToken } from '../lib/token-crypto.js';
+import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 
 const webhookSchema = z.object({
   name: z.string().min(1).max(100),
@@ -49,23 +50,21 @@ const testWebhookSchema = z.object({
   ]),
 });
 
+async function selectedWebhookWorkspace(c: any, user: { id: string; email: string; role: string }, creatorWrite = false) {
+  const workspaceId = c.req.header('x-workspace-id');
+  if (!workspaceId) throw new HTTPException(400, { message: 'A valid x-workspace-id header is required for webhook management requests.' });
+  if (creatorWrite) await requireCreatorWorkspaceAccess(user, workspaceId);
+  else await requireWorkspaceAccess(user, workspaceId);
+  return workspaceId;
+}
+
 export function createWebhookRoutes() {
   const app = new Hono<{ Variables: Variables }>();
 
   app.get('/', zValidator('query', querySchema), async (c: any) => {
     const { page, limit, isActive, sortBy, sortOrder } = c.req.valid('query');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await selectedWebhookWorkspace(c, user);
     
     const where: any = { workspaceId };
     
@@ -95,46 +94,23 @@ export function createWebhookRoutes() {
   app.get('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const webhook = await prisma.webhook.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!webhook) {
-      throw new HTTPException(404, { message: 'Webhook not found' });
-    }
-    
+    const workspaceId = await selectedWebhookWorkspace(c, user);
+    const webhook = await prisma.webhook.findFirst({ where: { id, workspaceId } });
+    if (!webhook) throw new HTTPException(404, { message: 'Webhook not found' });
     return c.json({ data: redactWebhook(webhook) });
   });
 
   app.post('/', zValidator('json', webhookSchema), async (c: any) => {
     const body = c.req.valid('json');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedWebhookWorkspace(c, user, true);
     
     // Generate secret if not provided
     const signingSecret = body.secret || generateSecret();
     
     const webhook = await prisma.webhook.create({
       data: {
-        workspaceId: workspaceMember.workspaceId,
+        workspaceId,
         name: body.name,
         url: body.url,
         events: body.events,
@@ -158,19 +134,8 @@ export function createWebhookRoutes() {
     const id = c.req.param('id');
     const body = c.req.valid('json');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const webhook = await prisma.webhook.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
+    const workspaceId = await selectedWebhookWorkspace(c, user, true);
+    const webhook = await prisma.webhook.findFirst({ where: { id, workspaceId } });
     
     if (!webhook) {
       throw new HTTPException(404, { message: 'Webhook not found' });
@@ -194,19 +159,8 @@ export function createWebhookRoutes() {
   app.delete('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const webhook = await prisma.webhook.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
+    const workspaceId = await selectedWebhookWorkspace(c, user, true);
+    const webhook = await prisma.webhook.findFirst({ where: { id, workspaceId } });
     
     if (!webhook) {
       throw new HTTPException(404, { message: 'Webhook not found' });
@@ -221,18 +175,10 @@ export function createWebhookRoutes() {
     const id = c.req.param('id');
     const { event } = c.req.valid('json');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedWebhookWorkspace(c, user, true);
     
     const webhook = await prisma.webhook.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
     });
     
     if (!webhook) {
@@ -304,18 +250,10 @@ export function createWebhookRoutes() {
     const id = c.req.param('id');
     const query = c.req.valid('query');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedWebhookWorkspace(c, user);
     
     const webhook = await prisma.webhook.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
     });
     
     if (!webhook) {
@@ -348,18 +286,10 @@ export function createWebhookRoutes() {
     const id = c.req.param('id');
     const deliveryId = c.req.param('deliveryId');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedWebhookWorkspace(c, user, true);
     
     const webhook = await prisma.webhook.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
     });
     
     if (!webhook) {

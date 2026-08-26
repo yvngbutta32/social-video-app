@@ -26,7 +26,9 @@
     "test:source-list-workspace": "tsx scripts/verify-source-list-workspace.ts",
     "test:json-safe": "tsx scripts/verify-json-safe.ts",
     "test:operational-guards": "tsx scripts/verify-operational-guards.ts",
-    "test:multipart-cleanup": "tsx scripts/verify-multipart-cleanup.ts"
+    "test:multipart-cleanup": "tsx scripts/verify-multipart-cleanup.ts",
+    "test:workspace-resolution": "tsx scripts/verify-workspace-resolution.ts",
+    "test:workspace-selection-audit": "tsx scripts/verify-workspace-selection-audit.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

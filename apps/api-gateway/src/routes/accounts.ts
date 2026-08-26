@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
 import { encryptToken } from '../lib/token-crypto.js';
 import { getPlatformCapability, listPlatformCapabilities } from '../lib/platform-capabilities.js';
+import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 
 const accountSchema = z.object({
   platform: z.enum(['tiktok', 'instagram', 'youtube', 'facebook', 'x', 'linkedin']),
@@ -32,23 +33,21 @@ const querySchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
+async function selectedAccountWorkspace(c: any, user: { id: string; email: string; role: string }, creatorWrite = false) {
+  const workspaceId = c.req.header('x-workspace-id');
+  if (!workspaceId) throw new HTTPException(400, { message: 'A valid x-workspace-id header is required for creator account requests.' });
+  if (creatorWrite) await requireCreatorWorkspaceAccess(user, workspaceId);
+  else await requireWorkspaceAccess(user, workspaceId);
+  return workspaceId;
+}
+
 export function createAccountRoutes() {
   const app = new Hono<{ Variables: Variables }>();
 
   app.get('/', zValidator('query', querySchema), async (c: any) => {
     const { page, limit, platform, status, sortBy, sortOrder } = c.req.valid('query');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await selectedAccountWorkspace(c, user);
     
     const where: any = { workspaceId };
     
@@ -96,18 +95,10 @@ export function createAccountRoutes() {
   app.get('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedAccountWorkspace(c, user);
     
     const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
     });
     
     if (!account) {
@@ -120,22 +111,14 @@ export function createAccountRoutes() {
   });
 
   app.post('/', zValidator('json', accountSchema), async (c: any) => {
-    const body = c.req.valid('json');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const account = await prisma.socialAccount.create({
-      data: {
-        workspaceId: workspaceMember.workspaceId,
-        platform: body.platform,
+const body = c.req.valid('json');
+const user = c.get('user');
+const workspaceId = await selectedAccountWorkspace(c, user, true);
+
+const account = await prisma.socialAccount.create({
+data: {
+        workspaceId,
+platform: body.platform,
         platformUserId: body.platformUserId,
         username: body.username,
         displayName: body.displayName,
@@ -164,22 +147,14 @@ export function createAccountRoutes() {
   });
 
   app.patch('/:id', zValidator('json', updateAccountSchema), async (c: any) => {
-    const id = c.req.param('id');
-    const body = c.req.valid('json');
-    const user = c.get('user');
+const id = c.req.param('id');
+const body = c.req.valid('json');
+const user = c.get('user');
+    const workspaceId = await selectedAccountWorkspace(c, user, true);
     
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
+const account = await prisma.socialAccount.findFirst({
+      where: { id, workspaceId },
+});
     
     if (!account) {
       throw new HTTPException(404, { message: 'Account not found' });
@@ -209,92 +184,38 @@ export function createAccountRoutes() {
   app.delete('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!account) {
-      throw new HTTPException(404, { message: 'Account not found' });
-    }
-    
+    const workspaceId = await selectedAccountWorkspace(c, user, true);
+    const account = await prisma.socialAccount.findFirst({ where: { id, workspaceId } });
+    if (!account) throw new HTTPException(404, { message: 'Account not found' });
     await prisma.socialAccount.delete({ where: { id } });
-    
     return c.json({ success: true });
   });
 
   app.post('/:id/refresh-token', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!account) {
-      throw new HTTPException(404, { message: 'Account not found' });
-    }
-    
+    const workspaceId = await selectedAccountWorkspace(c, user, true);
+    const account = await prisma.socialAccount.findFirst({ where: { id, workspaceId } });
+    if (!account) throw new HTTPException(404, { message: 'Account not found' });
     throw new HTTPException(501, { message: `Official ${account.platform} token refresh connector is not configured yet. Reconnect this creator-authorized account through the official OAuth flow.` });
   });
 
   app.post('/:id/sync-metrics', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!account) {
-      throw new HTTPException(404, { message: 'Account not found' });
-    }
-    
+    const workspaceId = await selectedAccountWorkspace(c, user, true);
+    const account = await prisma.socialAccount.findFirst({ where: { id, workspaceId } });
+    if (!account) throw new HTTPException(404, { message: 'Account not found' });
     throw new HTTPException(501, { message: `Official ${account.platform} metrics connector is not configured yet. No synthetic sync timestamp was recorded.` });
   });
 
   app.get('/:id/analytics', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedAccountWorkspace(c, user);
     
     const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: {
         scheduledPosts: {
           include: {
@@ -364,18 +285,10 @@ export function createAccountRoutes() {
   app.get('/:id/videos', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedAccountWorkspace(c, user);
     
     const account = await prisma.socialAccount.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: {
         scheduledPosts: {
           include: {

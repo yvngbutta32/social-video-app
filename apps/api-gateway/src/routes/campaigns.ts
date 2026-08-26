@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
-import { assertPublishingAllowed } from '../lib/pilot-access.js';
+import { assertPublishingAllowed, requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 
 const campaignSchema = z.object({
   name: z.string().min(1).max(100),
@@ -38,23 +38,21 @@ const querySchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
+async function selectedCampaignWorkspace(c: any, user: { id: string; email: string; role: string }, creatorWrite = false) {
+  const workspaceId = c.req.header('x-workspace-id');
+  if (!workspaceId) throw new HTTPException(400, { message: 'A valid x-workspace-id header is required for campaign requests.' });
+  if (creatorWrite) await requireCreatorWorkspaceAccess(user, workspaceId);
+  else await requireWorkspaceAccess(user, workspaceId);
+  return workspaceId;
+}
+
 export function createCampaignRoutes() {
   const app = new Hono<{ Variables: Variables }>();
 
   app.get('/', zValidator('query', querySchema), async (c: any) => {
     const { page, limit, status, objective, sortBy, sortOrder } = c.req.valid('query');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await selectedCampaignWorkspace(c, user);
     
     const where: any = { workspaceId };
     
@@ -101,56 +99,23 @@ export function createCampaignRoutes() {
   app.get('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
+    const workspaceId = await selectedCampaignWorkspace(c, user);
     const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-      include: {
-        variants: {
-          include: {
-            variant: {
-              include: {
-                video: true,
-                socialAccount: true,
-                metrics: { orderBy: { recordedAt: 'desc' } },
-              },
-            },
-          },
-        },
-      },
+      where: { id, workspaceId },
+      include: { variants: { include: { variant: { include: { video: true, socialAccount: true, metrics: { orderBy: { recordedAt: 'desc' } } } } } } },
     });
-    
-    if (!campaign) {
-      throw new HTTPException(404, { message: 'Campaign not found' });
-    }
-    
+    if (!campaign) throw new HTTPException(404, { message: 'Campaign not found' });
     return c.json({ data: campaign });
   });
 
   app.post('/', zValidator('json', campaignSchema), async (c: any) => {
     const body = c.req.valid('json');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedCampaignWorkspace(c, user, true);
     
     const campaign = await prisma.aBTest.create({
       data: {
-        workspaceId: workspaceMember.workspaceId,
+        workspaceId,
         name: body.name,
         hypothesis: body.description,
         testType: 'campaign',
@@ -188,169 +153,61 @@ export function createCampaignRoutes() {
     const id = c.req.param('id');
     const body = c.req.valid('json');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!campaign) {
-      throw new HTTPException(404, { message: 'Campaign not found' });
-    }
-    
-    const updated = await prisma.aBTest.update({
-      where: { id },
-      data: {
-        name: body.name,
-        hypothesis: body.description,
-        metadata: {
-          ...campaign.metadata as any,
-          ...body,
-        },
-      },
-    });
-    
+    const workspaceId = await selectedCampaignWorkspace(c, user, true);
+    const campaign = await prisma.aBTest.findFirst({ where: { id, workspaceId } });
+    if (!campaign) throw new HTTPException(404, { message: 'Campaign not found' });
+    const updated = await prisma.aBTest.update({ where: { id }, data: { name: body.name, hypothesis: body.description, metadata: { ...campaign.metadata as any, ...body } } });
     return c.json({ data: updated });
   });
 
   app.delete('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!campaign) {
-      throw new HTTPException(404, { message: 'Campaign not found' });
-    }
-    
+    const workspaceId = await selectedCampaignWorkspace(c, user, true);
+    const campaign = await prisma.aBTest.findFirst({ where: { id, workspaceId } });
+    if (!campaign) throw new HTTPException(404, { message: 'Campaign not found' });
     await prisma.aBTest.delete({ where: { id } });
-    
     return c.json({ success: true });
   });
 
   app.post('/:id/start', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-
-    await assertPublishingAllowed(workspaceMember.workspaceId);
-    
-    const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!campaign) {
-      throw new HTTPException(404, { message: 'Campaign not found' });
-    }
-    
-    const updated = await prisma.aBTest.update({
-      where: { id },
-      data: { status: 'running', startedAt: new Date() },
-    });
-    
+    const workspaceId = await selectedCampaignWorkspace(c, user, true);
+    await assertPublishingAllowed(workspaceId);
+    const campaign = await prisma.aBTest.findFirst({ where: { id, workspaceId } });
+    if (!campaign) throw new HTTPException(404, { message: 'Campaign not found' });
+    const updated = await prisma.aBTest.update({ where: { id }, data: { status: 'running', startedAt: new Date() } });
     return c.json({ success: true, message: 'Campaign started', data: updated });
   });
 
   app.post('/:id/pause', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!campaign) {
-      throw new HTTPException(404, { message: 'Campaign not found' });
-    }
-    
-    const updated = await prisma.aBTest.update({
-      where: { id },
-      data: { status: 'paused' },
-    });
-    
+    const workspaceId = await selectedCampaignWorkspace(c, user, true);
+    const campaign = await prisma.aBTest.findFirst({ where: { id, workspaceId } });
+    if (!campaign) throw new HTTPException(404, { message: 'Campaign not found' });
+    const updated = await prisma.aBTest.update({ where: { id }, data: { status: 'paused' } });
     return c.json({ success: true, message: 'Campaign paused', data: updated });
   });
 
   app.post('/:id/resume', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
-    });
-    
-    if (!campaign) {
-      throw new HTTPException(404, { message: 'Campaign not found' });
-    }
-    
-    const updated = await prisma.aBTest.update({
-      where: { id },
-      data: { status: 'running' },
-    });
-    
+    const workspaceId = await selectedCampaignWorkspace(c, user, true);
+    const campaign = await prisma.aBTest.findFirst({ where: { id, workspaceId } });
+    if (!campaign) throw new HTTPException(404, { message: 'Campaign not found' });
+    const updated = await prisma.aBTest.update({ where: { id }, data: { status: 'running' } });
     return c.json({ success: true, message: 'Campaign resumed', data: updated });
   });
 
   app.get('/:id/analytics', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedCampaignWorkspace(c, user);
     
     const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: {
         variants: {
           include: {
@@ -418,18 +275,10 @@ export function createCampaignRoutes() {
   app.get('/:id/videos', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await selectedCampaignWorkspace(c, user);
     
     const campaign = await prisma.aBTest.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: {
         variants: {
           include: {

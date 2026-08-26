@@ -78,4 +78,7 @@
 - [x] Add an explicit workspace selector to web and native creator interfaces with safe persisted selection.
 - [x] Pass the selected workspace through all authenticated Growth Studio account, publishing, readiness, learning, and adaptation requests.
 - [ ] Validate multi-workspace selection persistence with an invited account that belongs to more than one workspace before release.
+- [x] Verify existing audit persistence and authorized event boundaries for workspace-selection accountability.
+- [x] Record creator-authorized workspace-selection events without exposing workspace data across members.
+- [ ] Validate workspace-selection audit events against a deployed audit-log database before release.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
