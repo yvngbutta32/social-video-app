@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import { readFileSync } from 'fs';
 import { prisma } from '../lib/prisma.js';
 import { metricFreshness, normalizeOfficialMetricSnapshot } from '../lib/metric-ingestion.js';
+import { abortMultipartSourceUpload } from '../lib/source-storage.js';
+import { parseMultipartUploadSession } from '../lib/multipart-cleanup.js';
 
 const metricSchema = z.object({
   platform: z.enum(['tiktok', 'instagram', 'youtube', 'facebook', 'x', 'linkedin']),
@@ -31,6 +33,11 @@ const metricSchema = z.object({
   }),
 });
 
+const multipartCleanupSchema = z.object({
+  maxAgeHours: z.number().int().min(1).max(168).default(24),
+  limit: z.number().int().min(1).max(250).default(100),
+});
+
 function connectorToken() {
   const direct = process.env.CONNECTOR_INGESTION_TOKEN;
   if (direct) return direct.trim();
@@ -50,13 +57,61 @@ function authenticated(input: string | undefined, expected: string) {
   return actualBytes.length === expectedBytes.length && crypto.timingSafeEqual(actualBytes, expectedBytes);
 }
 
+function requireConnectorAuthentication(c: any) {
+  const expectedToken = connectorToken();
+  if (!expectedToken) throw new HTTPException(503, { message: 'Connector ingestion authentication is not configured.' });
+  if (!authenticated(c.req.header('x-connector-token'), expectedToken)) throw new HTTPException(401, { message: 'Invalid connector ingestion credentials.' });
+}
+
+async function cleanupExpiredMultipartUploads(maxAgeHours: number, limit: number) {
+  const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+  const candidates = await prisma.video.findMany({
+    where: { status: 'uploading', createdAt: { lte: cutoff } },
+    select: { id: true, metadata: true },
+    take: limit,
+    orderBy: { createdAt: 'asc' },
+  });
+  const result = { considered: candidates.length, archived: 0, aborted: 0, skipped: 0, abortFailures: 0 };
+  for (const candidate of candidates) {
+    const session = parseMultipartUploadSession(candidate.metadata);
+    if (!session) {
+      result.skipped += 1;
+      continue;
+    }
+    const metadata = candidate.metadata && typeof candidate.metadata === 'object' && !Array.isArray(candidate.metadata)
+      ? candidate.metadata as Record<string, unknown>
+      : {};
+    const archived = await prisma.video.updateMany({
+      where: { id: candidate.id, status: 'uploading' },
+      data: {
+        status: 'archived',
+        metadata: { ...metadata, multipartUpload: null, processingState: 'upload_expired', uploadCleanupAt: new Date().toISOString(), uploadCleanupReason: 'expired_incomplete_multipart_session' },
+      },
+    });
+    if (!archived.count) {
+      result.skipped += 1;
+      continue;
+    }
+    result.archived += 1;
+    try {
+      await abortMultipartSourceUpload({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId });
+      result.aborted += 1;
+    } catch {
+      result.abortFailures += 1;
+      await prisma.video.update({
+        where: { id: candidate.id },
+        data: { metadata: { ...metadata, multipartUpload: null, processingState: 'upload_expired', uploadCleanupAt: new Date().toISOString(), uploadCleanupReason: 'expired_incomplete_multipart_session', uploadCleanupState: 'abort_pending_retry' } },
+      }).catch(() => undefined);
+    }
+  }
+  return { ...result, cutoff: cutoff.toISOString() };
+}
+
 export function createInternalConnectorRoutes() {
   const app = new Hono();
 
   app.post('/metrics', zValidator('json', metricSchema), async (c) => {
-    const expectedToken = connectorToken();
-    if (!expectedToken) throw new HTTPException(503, { message: 'Connector ingestion authentication is not configured.' });
-    if (!authenticated(c.req.header('x-connector-token'), expectedToken)) throw new HTTPException(401, { message: 'Invalid connector ingestion credentials.' });
+    requireConnectorAuthentication(c);
 
     const snapshot = normalizeOfficialMetricSnapshot(c.req.valid('json'));
     const scheduledPost = await prisma.scheduledPost.findFirst({
@@ -107,6 +162,13 @@ export function createInternalConnectorRoutes() {
     });
 
     return c.json({ data: { ...result, freshness: metricFreshness(result.recordedAt, result.importedAt ?? importedAt) } }, 202);
+  });
+
+  app.post('/maintenance/multipart-uploads/cleanup', zValidator('json', multipartCleanupSchema), async (c) => {
+    requireConnectorAuthentication(c);
+    const input = c.req.valid('json');
+    const result = await cleanupExpiredMultipartUploads(input.maxAgeHours, input.limit);
+    return c.json({ data: result, safeguards: ['Only expired uploading records with a valid multipart session are archived.', 'Completed or processing creator sources are never selected.', 'Storage abort failures remain archived and are reported for a later protected retry.'] });
   });
 
   return app;

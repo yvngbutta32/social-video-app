@@ -458,18 +458,10 @@ export function createVideoRoutes() {
     const id = c.req.param('id');
     const body = c.req.valid('json');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     
     const video = await prisma.video.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
     });
     
     if (!video) {
@@ -494,18 +486,10 @@ export function createVideoRoutes() {
   app.delete('/:id', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     
     const video = await prisma.video.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
     });
     
     if (!video) {
@@ -555,18 +539,10 @@ export function createVideoRoutes() {
   app.post('/:id/duplicate', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
     
     const video = await prisma.video.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: { variants: true },
     });
     
@@ -576,7 +552,7 @@ export function createVideoRoutes() {
     
     const duplicated = await prisma.video.create({
       data: {
-        workspaceId: workspaceMember.workspaceId,
+        workspaceId,
         uploadedBy: user.id,
         title: `${video.title} (Copy)`,
         description: video.description,
@@ -600,18 +576,10 @@ export function createVideoRoutes() {
   app.get('/:id/analytics', async (c: any) => {
     const id = c.req.param('id');
     const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
+    const workspaceId = await workspaceForReadRequest(c, user);
     
     const video = await prisma.video.findFirst({
-      where: { id, workspaceId: workspaceMember.workspaceId },
+      where: { id, workspaceId },
       include: {
         variants: {
           include: {

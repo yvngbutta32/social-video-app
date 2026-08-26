@@ -66,3 +66,8 @@
 - [x] Ensure verified public provider webhooks bypass bearer middleware while retaining signature verification and abuse protections.
 - [x] Add web regression tests for explicit workspace selection and authenticated workspace headers.
 - [x] Add Redis-backed distributed request limiting with bounded local fallback for unavailable cache infrastructure.
+- [x] Present the current ViralBoost Creator preview for product review.
+- [x] Verify multipart upload session persistence and define an expiry-based creator-safe cleanup policy.
+- [x] Implement a protected maintenance trigger that aborts expired private upload sessions without deleting completed creator sources.
+- [ ] Configure a persistent scheduled caller for protected multipart cleanup after the production connector secret is provisioned.
+- [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
