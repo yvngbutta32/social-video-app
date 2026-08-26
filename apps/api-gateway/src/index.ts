@@ -20,9 +20,8 @@ import { createOwnerRoutes } from './routes/owner.js';
 import { createGrowthRoutes } from './routes/growth.js';
 import { createPublishingRoutes } from './routes/publishing.js';
 import { createInternalConnectorRoutes } from './routes/internal-connectors.js';
-import { checkOperationalReadiness, FixedWindowRateLimiter, RedisFixedWindowRateLimiter, type RateLimitResult, trustedClientKey } from './lib/operational-guards.js';
-import { prisma } from './lib/prisma.js';
-import { probePrivateSourceStorage } from './lib/source-storage.js';
+import { FixedWindowRateLimiter, RedisFixedWindowRateLimiter, type RateLimitResult, trustedClientKey } from './lib/operational-guards.js';
+import { getDeploymentReadiness } from './lib/deployment-readiness.js';
 
 const log = pino({ level: process.env.LOG_LEVEL || 'info' });
 
@@ -42,7 +41,6 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const limiter = new FixedWindowRateLimiter();
 let rateLimitRedis: IORedis | undefined;
 let rateLimitCacheUnavailableUntil = 0;
-const readinessTimeoutMs = Math.min(10_000, Math.max(250, Number(process.env.READINESS_TIMEOUT_MS || 2_000)));
 const maxJsonBodyBytes = Math.min(5 * 1024 * 1024, Math.max(16 * 1024, Number(process.env.MAX_JSON_BODY_BYTES || 1_048_576)));
 const maxSourceUploadBytes = Math.min(2 * 1024 * 1024 * 1024, Math.max(1_048_576, Number(process.env.MAX_SOURCE_UPLOAD_BYTES || 524_288_000)));
 
@@ -96,22 +94,6 @@ async function requestLimit(c: any, next: () => Promise<void>) {
   return next();
 }
 
-async function probeRedis() {
-  const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-    lazyConnect: true,
-    enableOfflineQueue: false,
-    maxRetriesPerRequest: 0,
-    connectTimeout: readinessTimeoutMs,
-  });
-  redis.on('error', () => undefined);
-  try {
-    await redis.connect();
-    await redis.ping();
-  } finally {
-    redis.disconnect();
-  }
-}
-
 app.use('*', logger());
 app.use('*', secureHeaders());
 app.use('*', prettyJSON());
@@ -128,11 +110,7 @@ app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOStri
 app.route('/internal/connectors', createInternalConnectorRoutes());
 
 app.get('/ready', async (c) => {
-  const readiness = await checkOperationalReadiness({
-    database: () => prisma.$queryRawUnsafe('SELECT 1'),
-    redis: probeRedis,
-    storage: probePrivateSourceStorage,
-  }, readinessTimeoutMs);
+  const readiness = await getDeploymentReadiness();
   return c.json({ ...readiness, timestamp: new Date().toISOString() }, readiness.status === 'ready' ? 200 : 503);
 });
 

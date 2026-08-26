@@ -87,4 +87,8 @@
 - [x] Verify private object-storage configuration and safe readiness-reporting boundaries.
 - [x] Add a bounded private-storage readiness check to the deployment health contract.
 - [ ] Validate storage readiness against deployed private object storage before release.
+- [x] Verify owner oversight access boundaries and safe readiness data projection.
+- [x] Add a read-only owner operational health view without creator media or infrastructure-secret exposure.
+- [ ] Complete an autonomous sweep of remaining code-addressable release gaps and isolate external-only certification gates.
+- [x] Replace unsupported static developer-console creators, growth, reliability, and invitation claims with authorized data or truthful unavailable states.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.

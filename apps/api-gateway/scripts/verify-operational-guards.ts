@@ -48,12 +48,13 @@ async function main() {
   assert.equal(rateLimited, true, 'Sensitive unauthenticated routes must return 429 after the bounded request budget is consumed.');
 
   const index = await readFile(new URL('../src/index.ts', import.meta.url), 'utf8');
-  assert.match(index, /checkOperationalReadiness/);
+  const readinessSource = await readFile(new URL('../src/lib/deployment-readiness.ts', import.meta.url), 'utf8');
+  assert.match(index, /getDeploymentReadiness/);
   assert.match(index, /bodyLimit/);
   assert.match(index, /FixedWindowRateLimiter/);
   assert.match(index, /RedisFixedWindowRateLimiter/);
   assert.match(index, /rateLimitCacheUnavailableUntil/);
-  assert.match(index, /probePrivateSourceStorage/);
+  assert.match(readinessSource, /probePrivateSourceStorage/);
   assert.match(index, /webhooks\/platform/);
   console.log('Operational guard verification passed.');
 }

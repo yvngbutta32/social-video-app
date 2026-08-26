@@ -5,6 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
 import { requirePlatformOwner } from '../lib/pilot-access.js';
+import { getDeploymentReadiness } from '../lib/deployment-readiness.js';
 
 const inviteSchema = z.object({
   email: z.string().email(),
@@ -51,6 +52,13 @@ async function writeOwnerAudit(
 
 export function createOwnerRoutes() {
   const app = new Hono<{ Variables: Variables }>();
+
+  app.get('/operational-health', async (c: any) => {
+    const owner = await requirePlatformOwner(c.get('user'));
+    const readiness = await getDeploymentReadiness();
+    await writeOwnerAudit(owner.id, 'operational_health_viewed', 'system', 'deployment', { status: readiness.status });
+    return c.json({ data: { ...readiness, timestamp: new Date().toISOString() } });
+  });
 
   app.get('/clients', zValidator('query', clientQuerySchema), async (c: any) => {
     const owner = await requirePlatformOwner(c.get('user'));
