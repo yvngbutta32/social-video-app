@@ -13,7 +13,7 @@
 - [x] Add invite-only mobile sign-in UI and native session exchange using the verified API contract.
 - [ ] Validate the sign-in and rotated-refresh flow against a deployed API with a disposable invited account.
 - [x] Implement authenticated multipart upload and truthful retry state for the verified server-authoritative source endpoint.
-- [ ] Add resumable/chunked upload only after the self-owned API provides a verified resumable upload protocol.
+- [x] Add resumable/chunked upload through the verified self-owned API multipart protocol.
 - [x] Add deterministic mobile unit tests for source formatting and safe edit recipe defaults.
 - [ ] Test the app at iPhone and Android portrait breakpoints without browser automation.
 - [x] Generate a unique ViralBoost Creator app icon and update app branding configuration.
@@ -40,3 +40,6 @@
 - [x] Remove residual mobile template scheme logic and unused scaffold metadata from the primary source package.
 - [x] Upgrade the web test-toolchain dependency chain to remediate its Vite and esbuild development-only advisories.
 - [ ] Resolve Expo SDK transitive advisories only through a tested SDK-supported dependency update; manual overrides broke the Expo-compatible Vitest and Vite graph and were reverted.
+- [x] Verify the self-owned API’s existing upload contract and define a creator-safe resumability boundary.
+- [x] Implement resumable private-source upload preparation and safe recovery status only where the server contract supports it.
+- [ ] Validate resumable uploads against device-reachable private object storage and a disposable creator workspace before release.

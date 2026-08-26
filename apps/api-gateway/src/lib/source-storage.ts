@@ -1,4 +1,4 @@
-import { CreateBucketCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateBucketCommand, CreateMultipartUploadCommand, GetObjectCommand, HeadBucketCommand, ListPartsCommand, PutObjectCommand, S3Client, UploadPartCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -51,6 +51,69 @@ async function ensureBucket(s3: S3Client, bucket: string) {
 export function sourceObjectKey(workspaceId: string, originalFilename: string) {
   const extension = originalFilename.toLowerCase().match(/\.[a-z0-9]{1,8}$/)?.[0] || '.mp4';
   return `workspaces/${workspaceId}/sources/${new Date().toISOString().slice(0, 10)}/${randomUUID()}${extension}`;
+}
+
+export const MULTIPART_SOURCE_PART_BYTES = 8 * 1024 * 1024;
+export const MAX_MULTIPART_SOURCE_PARTS = 10_000;
+
+function publicClient() {
+  const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+  if (!publicEndpoint) {
+    throw new Error('Private source resume is unavailable until MINIO_PUBLIC_ENDPOINT is configured for device access');
+  }
+  const normalizedPublicEndpoint = /^https?:\/\//.test(publicEndpoint) ? publicEndpoint : `https://${publicEndpoint}`;
+  return client(normalizedPublicEndpoint);
+}
+
+export function multipartPartCount(sizeBytes: number, partBytes = MULTIPART_SOURCE_PART_BYTES) {
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) throw new Error('A positive source size is required for multipart upload');
+  return Math.ceil(sizeBytes / partBytes);
+}
+
+export async function createMultipartSourceUpload(input: { workspaceId: string; originalFilename: string; contentType: string }) {
+  const config = storageConfig();
+  if (!config.accessKeyId || !config.secretAccessKey) throw new Error('Private source storage credentials are not configured');
+  const s3 = client();
+  await ensureBucket(s3, config.bucket);
+  const key = sourceObjectKey(input.workspaceId, input.originalFilename);
+  const created = await s3.send(new CreateMultipartUploadCommand({
+    Bucket: config.bucket,
+    Key: key,
+    ContentType: input.contentType,
+    Metadata: { workspaceId: input.workspaceId, sourceType: 'creator-upload' },
+  }));
+  if (!created.UploadId) throw new Error('Private source upload session could not be created');
+  return { bucket: config.bucket, key, uploadId: created.UploadId };
+}
+
+export async function createMultipartPartUrl(input: { bucket: string; key: string; uploadId: string; partNumber: number }) {
+  const expiresIn = 10 * 60;
+  const url = await getSignedUrl(publicClient(), new UploadPartCommand({
+    Bucket: input.bucket,
+    Key: input.key,
+    UploadId: input.uploadId,
+    PartNumber: input.partNumber,
+  }), { expiresIn });
+  return { url, expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() };
+}
+
+export async function listMultipartSourceParts(input: { bucket: string; key: string; uploadId: string }) {
+  const result = await client().send(new ListPartsCommand({ Bucket: input.bucket, Key: input.key, UploadId: input.uploadId }));
+  return (result.Parts || []).flatMap((part) => part.PartNumber && part.ETag ? [{ partNumber: part.PartNumber, etag: part.ETag, sizeBytes: part.Size ?? null }] : []);
+}
+
+export async function completeMultipartSourceUpload(input: { bucket: string; key: string; uploadId: string; parts: Array<{ partNumber: number; etag: string }> }) {
+  if (!input.parts.length) throw new Error('Private source upload has no completed parts');
+  await client().send(new CompleteMultipartUploadCommand({
+    Bucket: input.bucket,
+    Key: input.key,
+    UploadId: input.uploadId,
+    MultipartUpload: { Parts: input.parts.map((part) => ({ PartNumber: part.partNumber, ETag: part.etag })) },
+  }));
+}
+
+export async function abortMultipartSourceUpload(input: { bucket: string; key: string; uploadId: string }) {
+  await client().send(new AbortMultipartUploadCommand({ Bucket: input.bucket, Key: input.key, UploadId: input.uploadId }));
 }
 
 export async function createPrivatePreviewUrl(input: {

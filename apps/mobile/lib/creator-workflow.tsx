@@ -5,12 +5,20 @@ import { loadCreatorState, saveCreatorState } from "./creator-storage";
 
 export type SourceStatus = "ready_to_queue" | "uploading" | "processing" | "ready" | "failed";
 
+export type MultipartUploadRecovery = {
+  videoId: string;
+  partSizeBytes: number;
+  partCount: number;
+  uploadedPartNumbers: number[];
+};
+
 export type MobileSource = LocalCreatorMedia & {
   id: string;
   importedAt: string;
   status: SourceStatus;
   serverVideoId?: string;
   uploadError?: string;
+  multipartUpload?: MultipartUploadRecovery;
 };
 
 export type MobileEditRecipe = {
@@ -31,7 +39,7 @@ type CreatorWorkflowContextValue = {
   selectedSourceId: string | null;
   selectSource: (sourceId: string) => void;
   addLocalSource: (media: LocalCreatorMedia) => void;
-  updateSource: (sourceId: string, update: Partial<Pick<MobileSource, "status" | "serverVideoId" | "uploadError">>) => void;
+  updateSource: (sourceId: string, update: Partial<Pick<MobileSource, "status" | "serverVideoId" | "uploadError" | "multipartUpload">>) => void;
   recipeFor: (sourceId: string) => MobileEditRecipe;
   saveRecipe: (recipe: Omit<MobileEditRecipe, "revision">) => void;
 };
@@ -80,7 +88,7 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     setRecipes((current) => ({ ...current, [id]: createDefaultRecipe(id) }));
   }, []);
 
-  const updateSource = useCallback((sourceId: string, update: Partial<Pick<MobileSource, "status" | "serverVideoId" | "uploadError">>) => {
+  const updateSource = useCallback((sourceId: string, update: Partial<Pick<MobileSource, "status" | "serverVideoId" | "uploadError" | "multipartUpload">>) => {
     setSources((current) => current.map((source) => source.id === sourceId ? { ...source, ...update } : source));
   }, []);
 

@@ -5,7 +5,7 @@ import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
 import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
-import { uploadSource } from '../lib/source-storage.js';
+import { MAX_MULTIPART_SOURCE_PARTS, MULTIPART_SOURCE_PART_BYTES, abortMultipartSourceUpload, completeMultipartSourceUpload, createMultipartPartUrl, createMultipartSourceUpload, listMultipartSourceParts, multipartPartCount, uploadSource } from '../lib/source-storage.js';
 import { enqueueVideoProcessing } from '../lib/processing-dispatch';
 import { buildProcessingDiagnostic } from '../lib/processing-diagnostics.js';
 
@@ -31,6 +31,44 @@ const querySchema = z.object({
   sortBy: z.enum(['createdAt', 'updatedAt', 'scheduleAt', 'views']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
+
+const multipartInitiateSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  contentType: z.string().min(1).max(120),
+  sizeBytes: z.number().int().positive(),
+  title: z.string().trim().min(1).max(200).optional(),
+});
+
+function sourceUploadValidation(name: string, contentType: string, sizeBytes: number) {
+  const extensionAllowed = /\.(mp4|mov|webm|m4v)$/i.test(name);
+  const mimeAllowed = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'].includes(contentType);
+  if (!extensionAllowed || (contentType !== 'application/octet-stream' && !mimeAllowed)) {
+    throw new HTTPException(415, { message: 'Only MP4, MOV, WebM, and M4V creator source videos are accepted.' });
+  }
+  const maxBytes = Number(process.env.MAX_SOURCE_UPLOAD_BYTES || 524_288_000);
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxBytes) {
+    throw new HTTPException(413, { message: `Source video exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB upload limit or is empty.` });
+  }
+  const partCount = multipartPartCount(sizeBytes);
+  if (partCount > MAX_MULTIPART_SOURCE_PARTS) throw new HTTPException(413, { message: 'Source video requires too many secure upload parts.' });
+  return { maxBytes, partCount };
+}
+
+function multipartSession(metadata: unknown) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const candidate = (metadata as Record<string, unknown>).multipartUpload;
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  const value = candidate as Record<string, unknown>;
+  if (typeof value.uploadId !== 'string' || typeof value.objectKey !== 'string' || typeof value.bucket !== 'string' || !Number.isInteger(value.partCount) || !Number.isInteger(value.partSizeBytes)) return null;
+  return { uploadId: value.uploadId, objectKey: value.objectKey, bucket: value.bucket, partCount: value.partCount as number, partSizeBytes: value.partSizeBytes as number };
+}
+
+async function creatorWorkspaceForRequest(c: any, user: { id: string; email: string; role: string }) {
+  const workspaceId = c.req.header('x-workspace-id');
+  if (!workspaceId) throw new HTTPException(400, { message: 'A valid x-workspace-id header is required for creator upload requests.' });
+  await requireCreatorWorkspaceAccess(user, workspaceId);
+  return workspaceId;
+}
 
 export function createVideoRoutes() {
   const app = new Hono<{ Variables: Variables }>();
@@ -102,6 +140,107 @@ export function createVideoRoutes() {
       data: videos,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
+  });
+
+  app.post('/uploads/multipart/initiate', zValidator('json', multipartInitiateSchema), async (c: any) => {
+    const user = c.get('user');
+    const workspaceId = await creatorWorkspaceForRequest(c, user);
+    const input = c.req.valid('json');
+    const { partCount } = sourceUploadValidation(input.fileName, input.contentType, input.sizeBytes);
+    let stored;
+    try {
+      stored = await createMultipartSourceUpload({ workspaceId, originalFilename: input.fileName, contentType: input.contentType });
+    } catch {
+      throw new HTTPException(503, { message: 'Private resumable upload is unavailable until secure device-reachable storage is configured.' });
+    }
+    const title = input.title || input.fileName.replace(/\.[^.]+$/, '');
+    const video = await prisma.video.create({
+      data: {
+        workspaceId,
+        uploadedBy: user.id,
+        title,
+        originalFilename: input.fileName,
+        minioObjectKey: stored.key,
+        minioBucket: stored.bucket,
+        fileSizeBytes: BigInt(input.sizeBytes),
+        mimeType: input.contentType,
+        status: 'uploading',
+        metadata: {
+          sourceType: 'creator-multipart-upload',
+          processingState: 'awaiting_upload',
+          multipartUpload: { uploadId: stored.uploadId, objectKey: stored.key, bucket: stored.bucket, partCount, partSizeBytes: MULTIPART_SOURCE_PART_BYTES },
+        },
+      },
+      select: { id: true, status: true, createdAt: true },
+    });
+    return c.json({ data: { videoId: video.id, status: video.status, partSizeBytes: MULTIPART_SOURCE_PART_BYTES, partCount, createdAt: video.createdAt }, nextStep: 'request_part_url' }, 201);
+  });
+
+  app.get('/uploads/multipart/:id', async (c: any) => {
+    const user = c.get('user');
+    const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, status: true, metadata: true } });
+    if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
+    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    const session = multipartSession(video.metadata);
+    if (!session) throw new HTTPException(409, { message: 'This source does not have an active resumable upload session.' });
+    let completedParts;
+    try { completedParts = await listMultipartSourceParts({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId }); }
+    catch { throw new HTTPException(409, { message: 'This resumable upload session is no longer available. Start a new private upload.' }); }
+    return c.json({ data: { videoId: video.id, status: video.status, partSizeBytes: session.partSizeBytes, partCount: session.partCount, completedParts: completedParts.map((part) => part.partNumber), remainingParts: Math.max(0, session.partCount - completedParts.length) } });
+  });
+
+  app.post('/uploads/multipart/:id/part-url', zValidator('json', z.object({ partNumber: z.number().int().positive() })), async (c: any) => {
+    const user = c.get('user');
+    const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, metadata: true, status: true } });
+    if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
+    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    const session = multipartSession(video.metadata);
+    const { partNumber } = c.req.valid('json');
+    if (!session || video.status !== 'uploading' || partNumber > session.partCount) throw new HTTPException(409, { message: 'This private upload part is not available.' });
+    try {
+      const signed = await createMultipartPartUrl({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId, partNumber });
+      return c.json({ data: { partNumber, uploadUrl: signed.url, expiresAt: signed.expiresAt } });
+    } catch {
+      throw new HTTPException(503, { message: 'A secure upload URL could not be prepared. Retry this part from the creator workspace.' });
+    }
+  });
+
+  app.post('/uploads/multipart/:id/complete', async (c: any) => {
+    const user = c.get('user');
+    const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, metadata: true, status: true } });
+    if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
+    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    const session = multipartSession(video.metadata);
+    if (!session || video.status !== 'uploading') throw new HTTPException(409, { message: 'This private upload is not ready to complete.' });
+    let parts;
+    try { parts = await listMultipartSourceParts({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId }); }
+    catch { throw new HTTPException(409, { message: 'This resumable upload session is no longer available. Start a new private upload.' }); }
+    if (parts.length !== session.partCount || parts.some((part, index) => part.partNumber !== index + 1)) {
+      throw new HTTPException(409, { message: 'Private upload is incomplete. Resume the remaining source parts before completion.' });
+    }
+    try { await completeMultipartSourceUpload({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId, parts }); }
+    catch { throw new HTTPException(503, { message: 'Private upload completion could not be confirmed. Refresh upload status before retrying.' }); }
+    try {
+      const processing = await enqueueVideoProcessing(video.id);
+      await prisma.video.update({ where: { id: video.id }, data: { metadata: { sourceType: 'creator-multipart-upload', processingState: 'queued', processingJobId: processing.jobId, processingQueuedAt: new Date().toISOString() } } });
+      return c.json({ data: { videoId: video.id, status: 'uploading' }, processing, nextStep: 'processing_queued' });
+    } catch {
+      await prisma.video.update({ where: { id: video.id }, data: { metadata: { sourceType: 'creator-multipart-upload', processingState: 'dispatch_failed' } } }).catch(() => undefined);
+      throw new HTTPException(503, { message: 'Source stored privately, but local processing could not be queued. Retry processing from the creator workspace.' });
+    }
+  });
+
+  app.delete('/uploads/multipart/:id', async (c: any) => {
+    const user = c.get('user');
+    const video = await prisma.video.findUnique({ where: { id: c.req.param('id') }, select: { id: true, workspaceId: true, metadata: true, status: true } });
+    if (!video) throw new HTTPException(404, { message: 'Creator upload session not found.' });
+    await requireCreatorWorkspaceAccess(user, video.workspaceId);
+    const session = multipartSession(video.metadata);
+    if (!session || video.status !== 'uploading') throw new HTTPException(409, { message: 'This private upload can no longer be cancelled.' });
+    try { await abortMultipartSourceUpload({ bucket: session.bucket, key: session.objectKey, uploadId: session.uploadId }); }
+    catch { throw new HTTPException(503, { message: 'Private upload cancellation could not be confirmed. Refresh the source status before retrying.' }); }
+    await prisma.video.delete({ where: { id: video.id } });
+    return c.body(null, 204);
   });
 
   app.post('/upload', async (c: any) => {

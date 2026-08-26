@@ -6,7 +6,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useCreatorWorkflow, type MobileSource } from "@/lib/creator-workflow";
-import { uploadCreatorSource } from "@/lib/creator-upload";
+import { ResumableUploadUnavailableError, uploadCreatorSource, uploadCreatorSourceResumable } from "@/lib/creator-upload";
 import { formatBytes, formatDuration } from "@/lib/media-format";
 
 export default function LibraryScreen() {
@@ -16,8 +16,14 @@ export default function LibraryScreen() {
   const upload = async (source: MobileSource) => {
     updateSource(source.id, { status: "uploading", uploadError: undefined });
     try {
-      const receipt = await uploadCreatorSource(source);
-      updateSource(source.id, { serverVideoId: receipt.id, status: receipt.status === "uploading" ? "processing" : receipt.status, uploadError: undefined });
+      let receipt;
+      try {
+        receipt = await uploadCreatorSourceResumable(source, (multipartUpload) => updateSource(source.id, { multipartUpload }));
+      } catch (error) {
+        if (!(error instanceof ResumableUploadUnavailableError)) throw error;
+        receipt = await uploadCreatorSource(source);
+      }
+      updateSource(source.id, { serverVideoId: receipt.id, status: receipt.status === "uploading" ? "processing" : receipt.status, uploadError: undefined, multipartUpload: undefined });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "The private source could not be uploaded.";
       const safeMessage = /available on this device|sign in|API URL|workspace/i.test(detail)
@@ -41,7 +47,7 @@ export default function LibraryScreen() {
               <View style={styles.flex}><Text numberOfLines={1} style={[styles.sourceTitle, { color: colors.foreground }]}>{item.name}</Text><Text style={[styles.meta, { color: colors.muted }]}>{formatDuration(item.durationMs)} · {formatBytes(item.size)}</Text></View>
               <StatusPill tone={item.status === "failed" ? "attention" : item.status === "processing" ? "accent" : "muted"}>{item.status === "uploading" ? "UPLOADING" : item.status === "processing" ? "PROCESSING" : item.status === "failed" ? "ACTION NEEDED" : "LOCAL"}</StatusPill>
             </View>
-            <Text style={[styles.explainer, { color: item.status === "failed" ? colors.warning : colors.muted }]}>{item.status === "failed" ? item.uploadError : item.status === "processing" ? "The API confirmed private storage and queued this source for processing." : item.status === "uploading" ? "Sending this source to your private workspace. Keep the app open until it is confirmed." : "A secure workspace connection is required before this source enters private processing."}</Text>
+            <Text style={[styles.explainer, { color: item.status === "failed" ? colors.warning : colors.muted }]}>{item.status === "failed" ? (item.multipartUpload ? `Secure upload paused after ${item.multipartUpload.uploadedPartNumbers.length} of ${item.multipartUpload.partCount} confirmed parts. Retry to continue safely.` : item.uploadError) : item.status === "processing" ? "The API confirmed private storage and queued this source for processing." : item.status === "uploading" ? (item.multipartUpload ? `Securely storing ${item.multipartUpload.uploadedPartNumbers.length} of ${item.multipartUpload.partCount} confirmed source parts.` : "Preparing a private source upload session.") : "A secure workspace connection is required before this source enters private processing."}</Text>
             <Pressable onPress={() => { selectSource(item.id); router.push("/review" as never); }} style={({ pressed }) => [styles.action, { borderColor: colors.border }, pressed && styles.pressed]}>
               <IconSymbol name="sparkles" size={19} color={colors.primary} /><Text style={[styles.actionText, { color: colors.foreground }]}>Review adaptation plan</Text>
             </Pressable>
