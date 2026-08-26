@@ -5,6 +5,8 @@ import { loadCreatorState, saveCreatorState } from "./creator-storage";
 import { reconcileWorkspaceSources, type WorkspaceSourceSummary } from "./source-sync-contract";
 
 export type SourceStatus = "ready_to_queue" | "uploading" | "processing" | "ready" | "failed" | "archived";
+export const creatorTargetPlatforms = ["tiktok", "instagram", "youtube", "linkedin"] as const;
+export type CreatorTargetPlatform = (typeof creatorTargetPlatforms)[number];
 
 export type MultipartUploadRecovery = {
   videoId: string;
@@ -47,6 +49,8 @@ type CreatorWorkflowContextValue = {
   saveRecipe: (recipe: Omit<MobileEditRecipe, "revision">) => void;
   replaceRecipe: (recipe: MobileEditRecipe) => void;
   syncWorkspaceSources: (sources: WorkspaceSourceSummary[]) => void;
+  platformsFor: (sourceId: string) => CreatorTargetPlatform[];
+  setPlatformTargets: (sourceId: string, platforms: CreatorTargetPlatform[]) => void;
 };
 
 const CreatorWorkflowContext = createContext<CreatorWorkflowContextValue | null>(null);
@@ -67,6 +71,7 @@ export const createDefaultRecipe = (sourceId: string): MobileEditRecipe => ({
 export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
   const [sources, setSources] = useState<MobileSource[]>([]);
   const [recipes, setRecipes] = useState<Record<string, MobileEditRecipe>>({});
+  const [platformTargets, setPlatformTargetsState] = useState<Record<string, CreatorTargetPlatform[]>>({});
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
@@ -76,14 +81,15 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
         setSources(persisted.sources);
         setRecipes(persisted.recipes);
         setSelectedSourceId(persisted.selectedSourceId);
+        setPlatformTargetsState(persisted.platformTargets);
       }
     }).finally(() => setHydrated(true));
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    void saveCreatorState({ sources, recipes, selectedSourceId });
-  }, [hydrated, recipes, selectedSourceId, sources]);
+    void saveCreatorState({ sources, recipes, selectedSourceId, platformTargets });
+  }, [hydrated, platformTargets, recipes, selectedSourceId, sources]);
 
   const addLocalSource = useCallback((media: LocalCreatorMedia) => {
     const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -91,6 +97,7 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     setSources((current) => [source, ...current]);
     setSelectedSourceId(id);
     setRecipes((current) => ({ ...current, [id]: createDefaultRecipe(id) }));
+    setPlatformTargetsState((current) => ({ ...current, [id]: [] }));
   }, []);
 
   const updateSource = useCallback((sourceId: string, update: Partial<Pick<MobileSource, "status" | "serverVideoId" | "uploadError" | "multipartUpload">>) => {
@@ -123,6 +130,13 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     });
   }, [sources]);
 
+  const platformsFor = useCallback((sourceId: string) => platformTargets[sourceId] ?? [], [platformTargets]);
+
+  const setPlatformTargets = useCallback((sourceId: string, platforms: CreatorTargetPlatform[]) => {
+    const unique = [...new Set(platforms)].filter((platform): platform is CreatorTargetPlatform => creatorTargetPlatforms.includes(platform as CreatorTargetPlatform));
+    setPlatformTargetsState((current) => ({ ...current, [sourceId]: unique }));
+  }, []);
+
   const value = useMemo(() => ({
     sources,
     selectedSourceId,
@@ -133,7 +147,9 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     saveRecipe,
     replaceRecipe,
     syncWorkspaceSources,
-  }), [addLocalSource, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, sources, syncWorkspaceSources, updateSource]);
+    platformsFor,
+    setPlatformTargets,
+  }), [addLocalSource, platformsFor, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, setPlatformTargets, sources, syncWorkspaceSources, updateSource]);
 
   return <CreatorWorkflowContext.Provider value={value}>{children}</CreatorWorkflowContext.Provider>;
 }

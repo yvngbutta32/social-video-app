@@ -11,7 +11,7 @@ import {
   type GrowthObjective,
   type GrowthPlatform,
 } from '../lib/growth-plan.js';
-import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
+import { requireSelectedCreatorWorkspaceResourceAccess, requireSelectedWorkspaceResourceAccess } from '../lib/pilot-access.js';
 import { evaluateLearningSignal } from '../lib/growth-learning.js';
 import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
 import { buildExperimentScorecard } from '../lib/experiment-scorecard.js';
@@ -118,7 +118,7 @@ export function createGrowthRoutes() {
       throw new HTTPException(404, { message: 'Source video not found' });
     }
 
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
 
     return c.json({
       data: {
@@ -148,7 +148,7 @@ export function createGrowthRoutes() {
       throw new HTTPException(404, { message: 'Source video not found' });
     }
 
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
 
     if (video.status !== 'ready') {
       throw new HTTPException(409, { message: 'Source video must finish processing before experiments can be prepared' });
@@ -235,7 +235,7 @@ export function createGrowthRoutes() {
       },
     });
     if (!video) throw new HTTPException(404, { message: 'Source video not found' });
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
 
     const automaticRecipe = createAutomaticAdaptationRecipe({
       platform,
@@ -287,7 +287,7 @@ export function createGrowthRoutes() {
       },
     });
     if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
-    await requireWorkspaceAccess(actor, variant.video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, variant.video.workspaceId);
 
     const params = (variant.generationParams as Record<string, unknown> | null) ?? {};
     const recipe = adaptationRecipeSchema.parse(
@@ -338,7 +338,7 @@ export function createGrowthRoutes() {
       },
     });
     if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
-    await requireWorkspaceAccess(actor, variant.video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, variant.video.workspaceId);
 
     const objectKey = kind === 'thumbnail' ? variant.thumbnailObjectKey : variant.minioObjectKey;
     if (!objectKey) {
@@ -383,7 +383,7 @@ export function createGrowthRoutes() {
       },
     });
     if (!variant) throw new HTTPException(404, { message: 'Adaptation variant not found' });
-    await requireCreatorWorkspaceAccess(actor, variant.video.workspaceId);
+    await requireSelectedCreatorWorkspaceResourceAccess(c, actor, variant.video.workspaceId);
 
     const priorParams = (variant.generationParams as Record<string, unknown> | null) ?? {};
     const existingRecipe = parseAdaptationRecipe(priorParams.adaptationRecipe) ?? createAutomaticAdaptationRecipe({
@@ -481,7 +481,7 @@ export function createGrowthRoutes() {
       select: { id: true, workspaceId: true, title: true, status: true },
     });
     if (!video) throw new HTTPException(404, { message: 'Source video not found' });
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
     if (video.status !== 'ready') throw new HTTPException(409, { message: 'Source video must finish processing before a reach plan can be prepared' });
     const activeDestinations = await prisma.socialAccount.count({ where: { workspaceId: video.workspaceId, platform: { in: input.platforms }, isActive: true } });
     return c.json({ data: buildReachPlan({ sourceTitle: video.title, platforms: input.platforms as ('tiktok' | 'instagram' | 'youtube')[], objective: input.objective as GrowthObjective, activeDestinations }) });
@@ -500,7 +500,7 @@ export function createGrowthRoutes() {
       throw new HTTPException(404, { message: 'Source video not found' });
     }
 
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
 
     const [connectedDestinations, variants] = await Promise.all([
       prisma.socialAccount.count({ where: { workspaceId: video.workspaceId, isActive: true } }),
@@ -538,7 +538,7 @@ export function createGrowthRoutes() {
       throw new HTTPException(404, { message: 'Source video not found' });
     }
 
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
 
     const variants = await prisma.videoVariant.findMany({
       where: { videoId: video.id },
@@ -598,7 +598,7 @@ export function createGrowthRoutes() {
     const query = c.req.valid('query');
     const video = await prisma.video.findUnique({ where: { id: videoId }, select: { id: true, workspaceId: true } });
     if (!video) throw new HTTPException(404, { message: 'Source video not found' });
-    await requireWorkspaceAccess(actor, video.workspaceId);
+    await requireSelectedWorkspaceResourceAccess(c, actor, video.workspaceId);
 
     const variants = await prisma.videoVariant.findMany({
       where: { videoId: video.id },

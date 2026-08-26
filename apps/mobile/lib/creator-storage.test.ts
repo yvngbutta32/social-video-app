@@ -8,6 +8,7 @@ describe("creator local state persistence", () => {
       sources: [{ id: "source-1", uri: "file:///clip.mp4", name: "clip.mp4", mimeType: "video/mp4", size: 1024, durationMs: 10000, origin: "library" as const, importedAt: "2026-08-26T00:00:00.000Z", status: "ready_to_queue" as const }],
       recipes: { "source-1": { sourceId: "source-1", trimStartSeconds: 0, trimEndSeconds: 10, composition: "smart_crop" as const, focalX: 0.5, focalY: 0.42, headline: "", captionsEnabled: false, normalizeAudio: true, revision: 1 } },
       selectedSourceId: "source-1",
+      platformTargets: { "source-1": ["tiktok", "youtube"] as Array<"tiktok" | "youtube"> },
     };
     expect(parseCreatorState(serializeCreatorState(state))).toEqual(state);
   });
@@ -15,5 +16,11 @@ describe("creator local state persistence", () => {
   it("refuses malformed cached state instead of restoring unsafe values", () => {
     expect(parseCreatorState("not json")).toBeNull();
     expect(parseCreatorState(JSON.stringify({ sources: {}, recipes: [] }))).toBeNull();
+    expect(parseCreatorState(JSON.stringify({ sources: [], recipes: {}, selectedSourceId: null, platformTargets: { "source-1": ["unknown-platform"] } }))?.platformTargets).toEqual({ "source-1": [] });
+  });
+
+  it("migrates cached state created before platform targets existed", () => {
+    const migrated = parseCreatorState(JSON.stringify({ sources: [], recipes: {}, selectedSourceId: null }));
+    expect(migrated?.platformTargets).toEqual({});
   });
 });

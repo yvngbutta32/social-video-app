@@ -28,6 +28,7 @@
     "test:operational-guards": "tsx scripts/verify-operational-guards.ts",
     "test:multipart-cleanup": "tsx scripts/verify-multipart-cleanup.ts",
     "test:workspace-resolution": "tsx scripts/verify-workspace-resolution.ts",
+    "test:growth-workspace-resolution": "tsx scripts/verify-growth-workspace-resolution.ts",
     "test:workspace-selection-audit": "tsx scripts/verify-workspace-selection-audit.ts",
     "test:workspace-activity": "tsx scripts/verify-workspace-activity.ts",
     "test:owner-operational-health": "tsx scripts/verify-owner-operational-health.ts"

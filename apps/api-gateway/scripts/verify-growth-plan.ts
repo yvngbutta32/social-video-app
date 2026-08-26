@@ -154,7 +154,7 @@ async function main() {
   assert.equal(deadLetterOutcome.deadLetter, true);
 
   const growthRoute = await readFile(new URL('../src/routes/growth.ts', import.meta.url), 'utf8');
-  assert.match(growthRoute, /requireWorkspaceAccess\(actor, video\.workspaceId\)/);
+  assert.match(growthRoute, /requireSelectedWorkspaceResourceAccess\(c, actor, video\.workspaceId\)/);
   assert.match(growthRoute, /video\.status !== 'ready'/);
   assert.match(growthRoute, /No experiment is scheduled or published by this endpoint/);
   assert.match(growthRoute, /account_connection_required/);

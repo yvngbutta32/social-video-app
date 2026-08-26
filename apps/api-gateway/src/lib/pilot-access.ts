@@ -69,6 +69,40 @@ export async function requireCreatorWorkspaceAccess(actor: PilotActor, workspace
   return access;
 }
 
+type WorkspaceScopedRequest = { req: { header(name: string): string | undefined } };
+
+function selectedWorkspaceId(request: WorkspaceScopedRequest) {
+  const workspaceId = request.req.header('x-workspace-id');
+  if (!workspaceId) {
+    throw new HTTPException(400, { message: 'Select a creator workspace before accessing its media workflow' });
+  }
+  return workspaceId;
+}
+
+export async function requireSelectedWorkspaceResourceAccess(
+  request: WorkspaceScopedRequest,
+  actor: PilotActor,
+  resourceWorkspaceId: string
+) {
+  const workspaceId = selectedWorkspaceId(request);
+  if (workspaceId !== resourceWorkspaceId) {
+    throw new HTTPException(404, { message: 'Workspace resource not found' });
+  }
+  return requireWorkspaceAccess(actor, workspaceId);
+}
+
+export async function requireSelectedCreatorWorkspaceResourceAccess(
+  request: WorkspaceScopedRequest,
+  actor: PilotActor,
+  resourceWorkspaceId: string
+) {
+  const workspaceId = selectedWorkspaceId(request);
+  if (workspaceId !== resourceWorkspaceId) {
+    throw new HTTPException(404, { message: 'Workspace resource not found' });
+  }
+  return requireCreatorWorkspaceAccess(actor, workspaceId);
+}
+
 export async function assertPublishingAllowed(workspaceId: string) {
   const workspace = await prisma.workspace.findUnique({
     where: { id: workspaceId },

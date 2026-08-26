@@ -40,7 +40,10 @@ jobs:
           npm run test:webhook-security
           npm run test:cors-workspace-header
           npm run test:multipart-upload
+          npm run test:multipart-cleanup
           npm run test:source-list-workspace
+          npm run test:workspace-resolution
+          npm run test:growth-workspace-resolution
           npm run test:json-safe
           npm run test:operational-guards
       - run: npm run lint && npm run typecheck && npm run build

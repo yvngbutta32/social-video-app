@@ -93,4 +93,13 @@
 - [x] Replace unsupported static developer-console creators, growth, reliability, and invitation claims with authorized data or truthful unavailable states.
 - [x] Verify that replacing mock console claims did not remove any real creator workflow capability.
 - [x] Add regression coverage that distinguishes real creator controls from unsupported static demonstration claims.
+- [x] Verify current adaptation platform targeting and connection-capability boundaries.
+- [x] Add creator-controlled platform targets to adaptation planning without implying publishing or reach guarantees.
+- [x] Present capability-aware platform target choices in the native creator workflow.
+- [x] Require explicit selected-workspace authorization across all growth planning, adaptation, learning, and preview routes.
+- [x] Replace the native all-platform adaptation default with creator-selected, persisted platform targets.
+- [x] Add explicit growth workspace-resolution and creator-platform-target persistence checks to CI coverage.
+- [ ] Validate creator-selected targets against real connected platform accounts in staging before release.
 - [x] Require explicit selected-workspace authorization for residual source update, deletion, duplication, and analytics endpoints.
+- [x] Align the legacy growth-plan verifier with explicit selected-workspace authorization.
+- [x] Test migration of cached creator state that predates platform target preferences.
