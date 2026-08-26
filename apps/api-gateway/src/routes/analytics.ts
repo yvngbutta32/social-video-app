@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
+import type { Prisma } from '@prisma/client';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
 import { prisma } from '../lib/prisma.js';
+import { requireWorkspaceAccess } from '../lib/pilot-access.js';
+import { buildAnalyticsMetricWhere, latestMetricSnapshots, numberValue, periodKey, summarizeMetricSnapshots } from '../lib/analytics-integrity.js';
 import type { Variables } from '../index.js';
 
 const querySchema = z.object({
@@ -21,440 +24,231 @@ const exportSchema = z.object({
   ...querySchema.shape,
 });
 
+const workspaceHeaderSchema = z.string().uuid();
+
+async function resolveAnalyticsWorkspace(c: any) {
+  const requestedWorkspaceId = c.req.header('x-workspace-id');
+  const parsedWorkspaceId = workspaceHeaderSchema.safeParse(requestedWorkspaceId);
+  if (!parsedWorkspaceId.success) {
+    throw new HTTPException(400, { message: 'A valid x-workspace-id header is required for analytics requests' });
+  }
+
+  const access = await requireWorkspaceAccess(c.get('user'), parsedWorkspaceId.data);
+  return access.workspaceId;
+}
+
 export function createAnalyticsRoutes() {
   const app = new Hono<{ Variables: Variables }>();
 
   app.get('/overview', zValidator('query', querySchema), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    // Build where clause for post_metrics
-    const where: any = {
-      workspaceId,
-      recordedAt: { gte: startDate, lte: endDate },
-    };
-    
-    if (query.platform) {
-      where.platform = query.platform;
-    }
-    
-    if (query.campaignId) {
-      where.scheduledPost = { abTestId: query.campaignId };
-    }
-    
-    if (query.videoId) {
-      where.scheduledPost = { variant: { videoId: query.videoId } };
-    }
-    
-    if (query.accountId) {
-      where.scheduledPost = { socialAccountId: query.accountId };
-    }
-    
-    // Get aggregated metrics
-    const metrics = await prisma.postMetric.aggregate({
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
       where,
-      _sum: {
-        views: true,
-        likes: true,
-        comments: true,
-        shares: true,
-        saves: true,
-        clicks: true,
-        reach: true,
-        impressions: true,
-        followerGain: true,
-      },
-      _avg: {
-        engagementRate: true,
-        completionRate: true,
-      },
+      include: { scheduledPost: { include: { variant: { include: { video: true } } } } },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
-    
-    // Get top videos
-    const topVideos = await prisma.video.findMany({
-      where: {
-        workspaceId,
-        variants: {
-          some: {
-            scheduledPosts: {
-              some: {
-                metrics: {
-                  some: {
-                    recordedAt: { gte: startDate, lte: endDate },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      include: {
-        variants: {
-          include: {
-            scheduledPosts: {
-              include: {
-                metrics: {
-                  where: { recordedAt: { gte: startDate, lte: endDate } },
-                  orderBy: { recordedAt: 'desc' },
-                  take: 1,
-                },
-              },
-            },
-          },
-        },
-      },
-      take: 10,
-    });
-    
-    // Get platform breakdown
-    const platformBreakdown = await prisma.postMetric.groupBy({
-      by: ['platform'],
-      where,
-      _sum: {
-        views: true,
-        likes: true,
-        comments: true,
-        shares: true,
-        impressions: true,
-        reach: true,
-      },
-    });
-    
-    // Get trends (daily aggregates)
-    const trends = await prisma.$queryRaw`
-      SELECT 
-        DATE_TRUNC('day', recorded_at) as date,
-        platform,
-        SUM(views) as views,
-        SUM(likes) as likes,
-        SUM(comments) as comments,
-        SUM(shares) as shares,
-        SUM(impressions) as impressions,
-        SUM(reach) as reach
-      FROM post_metrics
-      WHERE workspace_id = ${workspaceId}
-        AND recorded_at >= ${startDate}
-        AND recorded_at <= ${endDate}
-      GROUP BY DATE_TRUNC('day', recorded_at), platform
-      ORDER BY date ASC
-    `;
-    
-    const totals = metrics._sum ?? {};
-    const averages = metrics._avg ?? {};
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const totals = summarizeMetricSnapshots(metrics);
+
+    const topVideosById = new Map<string, { id: string; title: string; thumbnailUrl: string | null; totalViews: number; totalEngagement: number }>();
+    const platformBreakdown = new Map<string, ReturnType<typeof summarizeMetricSnapshots>>();
+    const trendBreakdown = new Map<string, { date: string; platform: string; metrics: typeof metrics }>();
+    for (const metric of metrics) {
+      const video = metric.scheduledPost.variant.video;
+      const existingVideo = topVideosById.get(video.id) || { id: video.id, title: video.title || 'Untitled source', thumbnailUrl: metric.scheduledPost.variant.thumbnailObjectKey, totalViews: 0, totalEngagement: 0 };
+      existingVideo.totalViews += numberValue(metric.views);
+      existingVideo.totalEngagement += numberValue(metric.likes) + numberValue(metric.comments) + numberValue(metric.shares);
+      topVideosById.set(video.id, existingVideo);
+
+      const platformMetrics = metrics.filter((item) => item.platform === metric.platform);
+      platformBreakdown.set(metric.platform, summarizeMetricSnapshots(platformMetrics));
+      const date = periodKey(metric.recordedAt, 'day');
+      const trendKey = `${date}:${metric.platform}`;
+      const existingTrend = trendBreakdown.get(trendKey) || { date, platform: metric.platform, metrics: [] as typeof metrics };
+      existingTrend.metrics.push(metric);
+      trendBreakdown.set(trendKey, existingTrend);
+    }
+    const topVideos = [...topVideosById.values()].sort((left, right) => right.totalViews - left.totalViews).slice(0, 10);
+    const trends = [...trendBreakdown.values()].map((trend) => ({ date: trend.date, platform: trend.platform, ...summarizeMetricSnapshots(trend.metrics) }));
 
     return c.json({
       data: {
         summary: {
-          totalImpressions: Number(totals.impressions ?? 0),
-          totalViews: Number(totals.views ?? 0),
-          totalEngagement: Number(totals.likes ?? 0) + Number(totals.comments ?? 0) + Number(totals.shares ?? 0),
-          totalFollowers: Number(totals.followerGain ?? 0),
-          avgEngagementRate: Number(averages.engagementRate ?? 0),
-          avgCompletionRate: Number(averages.completionRate ?? 0),
+          totalImpressions: totals.impressions,
+          totalViews: totals.views,
+          totalEngagement: totals.likes + totals.comments + totals.shares,
+          totalFollowers: totals.followerGain,
+          avgEngagementRate: totals.averageEngagementRate,
+          avgCompletionRate: totals.averageCompletionRate,
         },
         trends: trends as any[],
-        topVideos: topVideos.map((v: any) => ({
-          id: v.id,
-          title: v.title,
-          thumbnailUrl: v.variants[0]?.thumbnailObjectKey,
-          totalViews: v.variants.reduce((sum: number, variant: any) => 
-            sum + variant.scheduledPosts.reduce((s: number, post: any) => 
-              s + Number(post.metrics[0]?.views || 0), 0), 0),
-          totalEngagement: v.variants.reduce((sum: number, variant: any) => 
-            sum + variant.scheduledPosts.reduce((s: number, post: any) => 
-              s + Number(post.metrics[0]?.likes || 0) + Number(post.metrics[0]?.comments || 0) + Number(post.metrics[0]?.shares || 0), 0), 0),
-        })),
+        topVideos,
         topCampaigns: [], // TODO: implement
-        platformBreakdown: platformBreakdown.reduce((acc, p) => {
-          acc[p.platform] = {
-            views: Number(p._sum.views || 0),
-            likes: Number(p._sum.likes || 0),
-            comments: Number(p._sum.comments || 0),
-            shares: Number(p._sum.shares || 0),
-            impressions: Number(p._sum.impressions || 0),
-            reach: Number(p._sum.reach || 0),
-          };
-          return acc;
-        }, {} as Record<string, any>),
+        platformBreakdown: Object.fromEntries([...platformBreakdown.entries()].map(([platform, summary]) => [platform, {
+          views: summary.views,
+          likes: summary.likes,
+          comments: summary.comments,
+          shares: summary.shares,
+          impressions: summary.impressions,
+          reach: summary.reach,
+        }])),
       },
     });
   });
 
   app.get('/timeseries', zValidator('query', querySchema), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    const where: any = {
-      workspaceId,
-      recordedAt: { gte: startDate, lte: endDate },
-    };
-    
-    if (query.platform) {
-      where.platform = query.platform;
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
+      where,
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
+    });
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const periods = new Map<string, { period: string; platform: string; metrics: typeof metrics }>();
+    for (const metric of metrics) {
+      const period = periodKey(metric.recordedAt, query.granularity);
+      const key = `${period}:${metric.platform}`;
+      const group = periods.get(key) || { period, platform: metric.platform, metrics: [] as typeof metrics };
+      group.metrics.push(metric);
+      periods.set(key, group);
     }
+    const data = [...periods.values()].map((group) => {
+      const summary = summarizeMetricSnapshots(group.metrics);
+      return {
+        period: group.period,
+        platform: group.platform,
+        views: summary.views,
+        likes: summary.likes,
+        comments: summary.comments,
+        shares: summary.shares,
+        saves: summary.saves,
+        clicks: summary.clicks,
+        reach: summary.reach,
+        impressions: summary.impressions,
+        followers: summary.followerGain,
+        engagement_rate: summary.averageEngagementRate,
+        completion_rate: summary.averageCompletionRate,
+      };
+    }).sort((left, right) => left.period.localeCompare(right.period) || left.platform.localeCompare(right.platform));
     
-    // Determine date truncation based on granularity
-    const truncMap = {
-      hour: 'hour',
-      day: 'day',
-      week: 'week',
-      month: 'month',
-    };
-    
-    const trunc = truncMap[query.granularity as keyof typeof truncMap];
-    
-    const data = await prisma.$queryRaw`
-      SELECT 
-        DATE_TRUNC(${trunc}, recorded_at) as period,
-        platform,
-        SUM(views) as views,
-        SUM(likes) as likes,
-        SUM(comments) as comments,
-        SUM(shares) as shares,
-        SUM(saves) as saves,
-        SUM(clicks) as clicks,
-        SUM(reach) as reach,
-        SUM(impressions) as impressions,
-        SUM(follower_gain) as followers,
-        AVG(engagement_rate) as engagement_rate,
-        AVG(completion_rate) as completion_rate
-      FROM post_metrics
-      WHERE workspace_id = ${workspaceId}
-        AND recorded_at >= ${startDate}
-        AND recorded_at <= ${endDate}
-      GROUP BY DATE_TRUNC(${trunc}, recorded_at), platform
-      ORDER BY period ASC
-    `;
-    
-    return c.json({ data: data as any[] });
+    return c.json({ data });
   });
 
   app.get('/platforms', zValidator('query', querySchema), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    const where: any = {
-      workspaceId,
-      recordedAt: { gte: startDate, lte: endDate },
-    };
-    
-    const platformData = await prisma.postMetric.groupBy({
-      by: ['platform'],
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
       where,
-      _sum: {
-        views: true,
-        likes: true,
-        comments: true,
-        shares: true,
-        saves: true,
-        clicks: true,
-        reach: true,
-        impressions: true,
-        followerGain: true,
-      },
-      _avg: {
-        engagementRate: true,
-        completionRate: true,
-      },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const byPlatform = new Map<string, typeof metrics>();
+    for (const metric of metrics) byPlatform.set(metric.platform, [...(byPlatform.get(metric.platform) || []), metric]);
     
     return c.json({
-      data: platformData.map(p => ({
-        platform: p.platform,
-        views: Number(p._sum.views || 0),
-        likes: Number(p._sum.likes || 0),
-        comments: Number(p._sum.comments || 0),
-        shares: Number(p._sum.shares || 0),
-        saves: Number(p._sum.saves || 0),
-        clicks: Number(p._sum.clicks || 0),
-        reach: Number(p._sum.reach || 0),
-        impressions: Number(p._sum.impressions || 0),
-        followers: Number(p._sum.followerGain || 0),
-        engagementRate: Number(p._avg.engagementRate || 0),
-        completionRate: Number(p._avg.completionRate || 0),
-      })),
+      data: [...byPlatform.entries()].map(([platform, platformMetrics]) => {
+        const summary = summarizeMetricSnapshots(platformMetrics);
+        return {
+          platform,
+          views: summary.views,
+          likes: summary.likes,
+          comments: summary.comments,
+          shares: summary.shares,
+          saves: summary.saves,
+          clicks: summary.clicks,
+          reach: summary.reach,
+          impressions: summary.impressions,
+          followers: summary.followerGain,
+          engagementRate: summary.averageEngagementRate,
+          completionRate: summary.averageCompletionRate,
+        };
+      }),
     });
   });
 
   app.get('/videos/top', zValidator('query', querySchema.extend({ limit: z.coerce.number().int().positive().max(100).default(10) })), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    const videos = await prisma.video.findMany({
-      where: {
-        workspaceId,
-        variants: {
-          some: {
-            scheduledPosts: {
-              some: {
-                metrics: {
-                  some: {
-                    recordedAt: { gte: startDate, lte: endDate },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      include: {
-        variants: {
-          include: {
-            scheduledPosts: {
-              include: {
-                metrics: {
-                  where: { recordedAt: { gte: startDate, lte: endDate } },
-                  orderBy: { recordedAt: 'desc' },
-                  take: 1,
-                },
-                socialAccount: true,
-              },
-            },
-          },
-        },
-      },
-      take: query.limit,
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
+      where,
+      include: { scheduledPost: { include: { variant: { include: { video: true } } } } },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
-    
-    const videoMetrics = videos.map((v: any) => {
-      const totalViews = v.variants.reduce((sum: number, variant: any) => 
-        sum + variant.scheduledPosts.reduce((s: number, post: any) => 
-          s + Number(post.metrics[0]?.views || 0), 0), 0);
-      const totalEngagement = v.variants.reduce((sum: number, variant: any) => 
-        sum + variant.scheduledPosts.reduce((s: number, post: any) => 
-          s + Number(post.metrics[0]?.likes || 0) + Number(post.metrics[0]?.comments || 0) + Number(post.metrics[0]?.shares || 0), 0), 0);
-      const totalImpressions = v.variants.reduce((sum: number, variant: any) => 
-        sum + variant.scheduledPosts.reduce((s: number, post: any) => 
-          s + Number(post.metrics[0]?.impressions || 0), 0), 0);
-      
-      return {
-        id: v.id,
-        title: v.title,
-        thumbnailUrl: v.variants[0]?.thumbnailObjectKey,
-        totalViews,
-        totalEngagement,
-        totalImpressions,
-        engagementRate: totalImpressions > 0 ? totalEngagement / totalImpressions : 0,
-        platforms: [...new Set(v.variants.map((vv: any) => vv.platform))],
-      };
-    }).sort((a: any, b: any) => b.totalViews - a.totalViews);
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const videos = new Map<string, { id: string; title: string; thumbnailUrl: string | null; totalViews: number; totalEngagement: number; totalImpressions: number; platforms: Set<string> }>();
+    for (const metric of metrics) {
+      const variant = metric.scheduledPost.variant;
+      const video = variant.video;
+      const current = videos.get(video.id) || { id: video.id, title: video.title || 'Untitled source', thumbnailUrl: variant.thumbnailObjectKey, totalViews: 0, totalEngagement: 0, totalImpressions: 0, platforms: new Set<string>() };
+      current.totalViews += numberValue(metric.views);
+      current.totalEngagement += numberValue(metric.likes) + numberValue(metric.comments) + numberValue(metric.shares);
+      current.totalImpressions += numberValue(metric.impressions);
+      current.platforms.add(metric.platform);
+      videos.set(video.id, current);
+    }
+    const videoMetrics = [...videos.values()].map((video) => ({
+      ...video,
+      platforms: [...video.platforms],
+      engagementRate: video.totalImpressions > 0 ? video.totalEngagement / video.totalImpressions : 0,
+    })).sort((left, right) => right.totalViews - left.totalViews).slice(0, query.limit);
     
     return c.json({ data: videoMetrics });
   });
 
   app.get('/campaigns/performance', zValidator('query', querySchema), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    const campaigns = await prisma.aBTest.findMany({
-      where: {
-        workspaceId,
-        startedAt: { gte: startDate, lte: endDate },
-      },
-      include: {
-        variants: {
-          include: {
-            variant: {
-              include: {
-                metrics: {
-                  where: { recordedAt: { gte: startDate, lte: endDate } },
-                  orderBy: { recordedAt: 'desc' },
-                },
-                socialAccount: true,
-                video: true,
-              },
-            },
-          },
-        },
-      },
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
+      where,
+      include: { scheduledPost: { include: { abTest: true } } },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
-    
-    const campaignMetrics = campaigns.map((c: any) => {
-      const totalViews = c.variants.reduce((sum: number, v: any) => 
-        sum + v.variant.metrics.reduce((s: number, m: any) => s + Number(m.views || 0), 0), 0);
-      const totalEngagement = c.variants.reduce((sum: number, v: any) => 
-        sum + v.variant.metrics.reduce((s: number, m: any) => 
-          s + Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0), 0), 0);
-      const totalImpressions = c.variants.reduce((sum: number, v: any) => 
-        sum + v.variant.metrics.reduce((s: number, m: any) => s + Number(m.impressions || 0), 0), 0);
-      
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const campaigns = new Map<string, { id: string; name: string; status: string; hypothesis: string | null; startedAt: Date; completedAt: Date | null; metrics: typeof metrics; variantIds: Set<string> }>();
+    for (const metric of metrics) {
+      const campaign = metric.scheduledPost.abTest;
+      if (!campaign) continue;
+      const current = campaigns.get(campaign.id) || { id: campaign.id, name: campaign.name, status: campaign.status, hypothesis: campaign.hypothesis, startedAt: campaign.startedAt, completedAt: campaign.completedAt, metrics: [] as typeof metrics, variantIds: new Set<string>() };
+      current.metrics.push(metric);
+      current.variantIds.add(metric.scheduledPost.variantId);
+      campaigns.set(campaign.id, current);
+    }
+    const campaignMetrics = [...campaigns.values()].map((campaign) => {
+      const summary = summarizeMetricSnapshots(campaign.metrics);
+      const totalEngagement = summary.likes + summary.comments + summary.shares;
       return {
-        id: c.id,
-        name: c.name,
-        status: c.status,
-        hypothesis: c.hypothesis,
-        totalViews,
+        id: campaign.id,
+        name: campaign.name,
+        status: campaign.status,
+        hypothesis: campaign.hypothesis,
+        totalViews: summary.views,
         totalEngagement,
-        totalImpressions,
-        engagementRate: totalImpressions > 0 ? totalEngagement / totalImpressions : 0,
-        variantCount: c.variants.length,
-        startedAt: c.startedAt,
-        completedAt: c.completedAt,
+        totalImpressions: summary.impressions,
+        engagementRate: summary.impressions > 0 ? totalEngagement / summary.impressions : 0,
+        variantCount: campaign.variantIds.size,
+        startedAt: campaign.startedAt,
+        completedAt: campaign.completedAt,
       };
     });
     
@@ -463,81 +257,63 @@ export function createAnalyticsRoutes() {
 
   app.get('/accounts/growth', zValidator('query', querySchema), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    const accounts = await prisma.socialAccount.findMany({
-      where: { workspaceId, isActive: true },
-      include: {
-        scheduledPosts: {
-          where: { postedAt: { gte: startDate, lte: endDate } },
-          include: {
-            metrics: { orderBy: { recordedAt: 'desc' }, take: 1 },
-          },
-        },
-      },
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
+      where,
+      include: { scheduledPost: { include: { socialAccount: true } } },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
-    
-    const growthData = accounts.map(acc => {
-      const totalFollowerGain = acc.scheduledPosts.reduce((sum, post) => 
-        sum + Number(post.metrics[0]?.followerGain || 0), 0);
-      const postsCount = acc.scheduledPosts.length;
-      
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const accounts = new Map<string, { id: string; platform: string; username: string; displayName: string | null; followerCount: number; metrics: typeof metrics; postIds: Set<string> }>();
+    for (const metric of metrics) {
+      const account = metric.scheduledPost.socialAccount;
+      if (!account.isActive) continue;
+      const current = accounts.get(account.id) || { id: account.id, platform: account.platform, username: account.username || 'unknown', displayName: account.displayName, followerCount: account.followerCount, metrics: [] as typeof metrics, postIds: new Set<string>() };
+      current.metrics.push(metric);
+      current.postIds.add(metric.scheduledPostId);
+      accounts.set(account.id, current);
+    }
+    const growthData = [...accounts.values()].map((account) => {
+      const summary = summarizeMetricSnapshots(account.metrics);
       return {
-        id: acc.id,
-        platform: acc.platform,
-        username: acc.username,
-        displayName: acc.displayName,
-        followerCount: acc.followerCount,
-        followerGain: totalFollowerGain,
-        postsCount,
-        growthRate: acc.followerCount > 0 ? totalFollowerGain / acc.followerCount : 0,
+        id: account.id,
+        platform: account.platform,
+        username: account.username,
+        displayName: account.displayName,
+        followerCount: account.followerCount,
+        followerGain: summary.followerGain,
+        postsCount: account.postIds.size,
+        growthRate: account.followerCount > 0 ? summary.followerGain / account.followerCount : 0,
       };
-    }).sort((a, b) => b.followerGain - a.followerGain);
+    }).sort((left, right) => right.followerGain - left.followerGain);
     
     return c.json({ data: growthData });
   });
 
   app.get('/audience/demographics', zValidator('query', querySchema), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    // Get metrics with audience data from metadata
-    const metrics = await prisma.postMetric.findMany({
-      where: {
-        workspaceId,
-        recordedAt: { gte: startDate, lte: endDate },
-      },
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    const observedMetrics = await prisma.postMetric.findMany({
+      where,
       select: {
-        metadata: true,
+        id: true,
+        scheduledPostId: true,
         platform: true,
+        recordedAt: true,
+        importedAt: true,
+        metadata: true,
       },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
+    const metrics = latestMetricSnapshots(observedMetrics);
     
     // Aggregate demographics from metadata
     const ageGroups: Record<string, number> = {};
@@ -592,70 +368,42 @@ export function createAnalyticsRoutes() {
     contentType: z.enum(['video', 'image', 'carousel', 'story', 'reel', 'short']).optional(),
   })), async (c: any) => {
     const query = c.req.valid('query');
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     const startDate = new Date(query.startDate);
     const endDate = new Date(query.endDate);
     
-    const where: any = {
-      workspaceId,
-      recordedAt: { gte: startDate, lte: endDate },
-    };
-    
-    if (query.platform) {
-      where.platform = query.platform;
+    const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
+    if (query.contentType) {
+      const existingScheduledPostFilter = where.scheduledPost as Prisma.ScheduledPostWhereInput | undefined;
+      where.scheduledPost = {
+        AND: [
+          ...(existingScheduledPostFilter ? [existingScheduledPostFilter] : []),
+          { variant: { variantType: query.contentType } },
+        ],
+      };
     }
-    
-    const metrics = await prisma.postMetric.findMany({
+    const observedMetrics = await prisma.postMetric.findMany({
       where,
-      include: {
-        scheduledPost: {
-          include: {
-            variant: {
-              include: {
-                video: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { recordedAt: 'desc' },
+      include: { scheduledPost: { include: { variant: { include: { video: true } } } } },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
     });
-    
-    // Group by content type (variant type)
-    const contentMap: Record<string, any> = {};
-    
-    for (const m of metrics) {
-      const variantType = m.scheduledPost?.variant?.variantType || 'unknown';
-      if (!contentMap[variantType]) {
-        contentMap[variantType] = {
-          contentType: variantType,
-          totalViews: 0,
-          totalEngagement: 0,
-          totalImpressions: 0,
-          postCount: 0,
-        };
-      }
-      contentMap[variantType].totalViews += Number(m.views);
-      contentMap[variantType].totalEngagement += Number(m.likes) + Number(m.comments) + Number(m.shares);
-      contentMap[variantType].totalImpressions += Number(m.impressions);
-      contentMap[variantType].postCount += 1;
+    const metrics = latestMetricSnapshots(observedMetrics);
+    const contentMap = new Map<string, { totalViews: number; totalEngagement: number; totalImpressions: number; postCount: number }>();
+    for (const metric of metrics) {
+      const variantType = metric.scheduledPost.variant.variantType || 'unknown';
+      const content = contentMap.get(variantType) || { totalViews: 0, totalEngagement: 0, totalImpressions: 0, postCount: 0 };
+      content.totalViews += numberValue(metric.views);
+      content.totalEngagement += numberValue(metric.likes) + numberValue(metric.comments) + numberValue(metric.shares);
+      content.totalImpressions += numberValue(metric.impressions);
+      content.postCount += 1;
+      contentMap.set(variantType, content);
     }
     
-    const contentPerformance = Object.values(contentMap).map(c => ({
-      ...c,
-      engagementRate: c.totalImpressions > 0 ? c.totalEngagement / c.totalImpressions : 0,
-    })).sort((a, b) => b.totalViews - a.totalViews);
+    const contentPerformance = [...contentMap.entries()].map(([contentType, content]) => ({
+      contentType,
+      ...content,
+      engagementRate: content.totalImpressions > 0 ? content.totalEngagement / content.totalImpressions : 0,
+    })).sort((left, right) => right.totalViews - left.totalViews);
     
     return c.json({ data: contentPerformance });
   });
@@ -673,28 +421,14 @@ export function createAnalyticsRoutes() {
   });
 
   app.get('/realtime', async (c: any) => {
-    const user = c.get('user');
-    
-    const workspaceMember = await prisma.workspaceMember.findFirst({
-      where: { userId: user.id },
-      select: { workspaceId: true },
-    });
-    
-    if (!workspaceMember) {
-      throw new HTTPException(403, { message: 'No workspace access' });
-    }
-    
-    const workspaceId = workspaceMember.workspaceId;
+    const workspaceId = await resolveAnalyticsWorkspace(c);
     
     // Get metrics from last hour
     const oneHourAgo = new Date(Date.now() - 3600000);
     
-    const recentMetrics = await prisma.postMetric.findMany({
-      where: {
-        workspaceId,
-        recordedAt: { gte: oneHourAgo },
-      },
-      orderBy: { recordedAt: 'desc' },
+    const observedMetrics = await prisma.postMetric.findMany({
+      where: { workspaceId, recordedAt: { gte: oneHourAgo } },
+      orderBy: [{ scheduledPostId: 'asc' }, { recordedAt: 'desc' }, { importedAt: 'desc' }],
       take: 100,
       include: {
         scheduledPost: {
@@ -709,17 +443,18 @@ export function createAnalyticsRoutes() {
       },
     });
     
-    const activeViewers = recentMetrics.reduce((sum, m) => sum + Number(m.views || 0), 0);
+    const recentMetrics = latestMetricSnapshots(observedMetrics);
+    const activeViewers = recentMetrics.reduce((sum, m) => sum + numberValue(m.views), 0);
     const currentViews = recentMetrics.length;
     const currentEngagement = recentMetrics.reduce((sum, m) => 
-      sum + Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0), 0);
+      sum + numberValue(m.likes) + numberValue(m.comments) + numberValue(m.shares), 0);
     
     // Get top videos in last hour
     const videoViews: Record<string, number> = {};
     for (const m of recentMetrics) {
       const videoId = m.scheduledPost?.variant?.videoId;
       if (videoId) {
-        videoViews[videoId] = (videoViews[videoId] || 0) + Number(m.views || 0);
+        videoViews[videoId] = (videoViews[videoId] || 0) + numberValue(m.views);
       }
     }
     
