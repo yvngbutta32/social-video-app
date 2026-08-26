@@ -1,0 +1,26 @@
+# Project TODO
+
+- [x] Configure the ViralBoost Creator mobile information architecture and navigation.
+- [x] Build creator Home with recent sources and processing-aware upload-boundary context.
+- [x] Build private media intake sheet with mobile permission and upload-boundary feedback.
+- [x] Build source processing detail with safe diagnostics and bounded retry guidance.
+- [x] Build adaptation review with platform-native draft cards and artifact-quality facts.
+- [x] Build non-destructive Edit Lab with trim, focal composition, captions, headline, and audio controls.
+- [x] Build learning view with evidence-quality and freshness states.
+- [x] Add local persistence for safe source and edit-recipe draft state.
+- [x] Add secure API bridge configuration for the existing invite-only ViralBoost API.
+- [x] Add a native-client refresh-token response contract to the self-owned API without exposing refresh tokens to browser clients.
+- [x] Add invite-only mobile sign-in UI and native session exchange using the verified API contract.
+- [ ] Validate the sign-in and rotated-refresh flow against a deployed API with a disposable invited account.
+- [x] Implement authenticated multipart upload and truthful retry state for the verified server-authoritative source endpoint.
+- [ ] Add resumable/chunked upload only after the self-owned API provides a verified resumable upload protocol.
+- [x] Add deterministic mobile unit tests for source formatting and safe edit recipe defaults.
+- [ ] Test the app at iPhone and Android portrait breakpoints without browser automation.
+- [x] Generate a unique ViralBoost Creator app icon and update app branding configuration.
+- [x] Align Expo SDK peer and patch dependencies identified by project-health validation.
+- [ ] Validate native build quality, accessibility, and no-secret boundaries.
+- [x] Preserve the verified mobile milestone in GitHub.
+- [x] Migrate the tested native companion source into the primary repository under apps/mobile without carrying local build artifacts.
+- [x] Remove unused template backend and managed-auth runtime wiring from the native companion package.
+- [x] Remove managed-project metadata and credentials from the source package before GitHub preservation.
+- [x] Remove the residual template environment loader from the native configuration path.
