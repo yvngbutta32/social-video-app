@@ -108,3 +108,4 @@
 - [x] Improve native Review accessibility semantics for target selection and verified connection status.
 - [x] Cross-examine official platform integration requirements and translate verified capability readiness into creator-facing guidance.
 - [x] Derive and present a truthful creator-action readiness decision from verified account and platform capability data.
+- [x] Publish a complete evidence-based product scope, architecture, and remaining-work roadmap.
