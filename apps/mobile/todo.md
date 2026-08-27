@@ -114,3 +114,5 @@
 - [x] Restore and verify the unavailable native project preview.
 - [x] Redesign the native creator interface with a premium visual system and stronger iOS-first hierarchy.
 - [x] Repair native web-preview contrast so the premium dark appearance uses matching foreground and surface colors.
+- [x] Restore GitHub authentication and push the completed premium native redesign to the primary repository.
+- [x] Verify the refreshed GitHub session and retry the blocked primary repository push.
