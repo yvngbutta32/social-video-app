@@ -5,7 +5,7 @@ type OfficialActionRequirement = {
   sourceUrl: string | null;
 };
 
-type PlatformCapability = {
+export type PlatformCapability = {
   platform: SupportedPlatform;
   label: string;
   officialPublishing: 'direct_post' | 'media_publish' | 'video_insert' | 'not_configured';

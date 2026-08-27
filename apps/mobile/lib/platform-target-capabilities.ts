@@ -24,7 +24,7 @@ export type WorkspacePlatformAccount = {
 
 export type PlatformTargetConnectionState = {
   platform: CreatorTargetPlatform;
-  state: "connected" | "connection_required" | "official_connector_unavailable" | "status_unavailable";
+  state: "action_ready" | "connected" | "connection_required" | "official_connector_unavailable" | "status_unavailable";
   label: string;
   detail: string;
   accountName: string | null;
@@ -37,6 +37,36 @@ function asObject(value: unknown): Record<string, unknown> | null {
 
 function asTargetPlatform(value: unknown): CreatorTargetPlatform | null {
   return typeof value === "string" && targetPlatforms.has(value as CreatorTargetPlatform) ? value as CreatorTargetPlatform : null;
+}
+
+const actionReadinessStateValues = new Set(["action_ready", "official_connector_required", "creator_connection_required", "creator_reconnection_required"]);
+
+export function parsePlatformActionReadiness(payload: unknown): PlatformTargetConnectionState[] {
+  const root = asObject(payload);
+  if (!Array.isArray(root?.data)) throw new Error("Platform action readiness is unavailable from this secure workspace.");
+
+  return root.data.flatMap((value) => {
+    const item = asObject(value);
+    const platform = asTargetPlatform(item?.platform);
+    if (!item || !platform || typeof item.label !== "string" || typeof item.actionAllowed !== "boolean" || !actionReadinessStateValues.has(item.state as string) || !Array.isArray(item.blockers) || !item.blockers.every((blocker) => typeof blocker === "string") || !Array.isArray(item.actionRequirements)) return [];
+    const actionRequirements = item.actionRequirements.flatMap((requirement) => {
+      const parsed = asObject(requirement);
+      return typeof parsed?.label === "string" && (typeof parsed.sourceUrl === "string" || parsed.sourceUrl === null) ? [{ label: parsed.label, sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : null }] : [];
+    });
+    const state: PlatformTargetConnectionState["state"] = item.actionAllowed
+      ? "action_ready"
+      : item.state === "official_connector_required"
+        ? "official_connector_unavailable"
+        : "connection_required";
+    return [{
+      platform,
+      state,
+      label: item.actionAllowed ? "Ready for creator review" : item.state === "official_connector_required" ? "Official connector unavailable" : item.state === "creator_reconnection_required" ? "Reconnect creator account" : "Creator connection required",
+      detail: item.actionAllowed ? "The platform gate is clear. Creator review and explicit approval are still required for any action." : item.blockers[0] ?? "This target is not ready for a creator action.",
+      accountName: typeof item.accountName === "string" ? item.accountName : null,
+      actionRequirements,
+    }];
+  });
 }
 
 export function parsePlatformCapabilities(payload: unknown): PlatformCapability[] {

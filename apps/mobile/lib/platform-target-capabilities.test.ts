@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parsePlatformCapabilities, parseWorkspacePlatformAccounts, projectPlatformTargetConnectionStates } from "./platform-target-capabilities";
+import { parsePlatformActionReadiness, parsePlatformCapabilities, parseWorkspacePlatformAccounts, projectPlatformTargetConnectionStates } from "./platform-target-capabilities";
 
 describe("platform target capability projection", () => {
   const capabilities = parsePlatformCapabilities({
@@ -28,5 +28,16 @@ describe("platform target capability projection", () => {
   it("rejects malformed response envelopes rather than inventing a capability state", () => {
     expect(() => parsePlatformCapabilities({ data: {} })).toThrow(/unavailable/i);
     expect(() => parseWorkspacePlatformAccounts({})).toThrow(/unavailable/i);
+  });
+
+  it("maps the server-derived action gate without presenting blocked targets as ready", () => {
+    const states = parsePlatformActionReadiness({ data: [
+      { platform: "tiktok", label: "TikTok", actionAllowed: false, state: "official_connector_required", accountName: "Creator One", blockers: ["The certified official connector is not deployed and verified for this target."], actionRequirements: [{ label: "Complete creator authorization.", sourceUrl: "https://developers.tiktok.com/docs/en/content-posting-api-get-started" }] },
+      { platform: "youtube", label: "YouTube", actionAllowed: true, state: "action_ready", accountName: "Creator One", blockers: [], actionRequirements: [] },
+    ] });
+    expect(states).toEqual([
+      expect.objectContaining({ platform: "tiktok", state: "official_connector_unavailable", label: "Official connector unavailable" }),
+      expect.objectContaining({ platform: "youtube", state: "action_ready", label: "Ready for creator review" }),
+    ]);
   });
 });

@@ -26,7 +26,7 @@ function formatPlatform(platform: string) {
 }
 
 function statusTone(state: PlatformTargetConnectionState["state"]) {
-  return state === "connected" ? "#A7F3D0" : state === "official_connector_unavailable" ? "#FBD38D" : state === "connection_required" ? "#B9E6FF" : "#B4D2E3";
+  return state === "action_ready" || state === "connected" ? "#A7F3D0" : state === "official_connector_unavailable" ? "#FBD38D" : state === "connection_required" ? "#B9E6FF" : "#B4D2E3";
 }
 
 export default function ReviewScreen() {

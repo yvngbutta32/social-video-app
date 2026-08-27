@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import type { Variables } from '../index.js';
 import { encryptToken } from '../lib/token-crypto.js';
 import { getPlatformCapability, listPlatformCapabilities } from '../lib/platform-capabilities.js';
+import { assessPlatformActionReadiness } from '../lib/platform-action-readiness.js';
 import { requireCreatorWorkspaceAccess, requireWorkspaceAccess } from '../lib/pilot-access.js';
 
 const accountSchema = z.object({
@@ -90,6 +91,22 @@ export function createAccountRoutes() {
 
   app.get('/capabilities', async (c: any) => {
     return c.json({ data: listPlatformCapabilities(), safeguards: ['Only creator-authorized official integrations may publish or collect platform data.', 'A capability marked connector_required is not presented as production-ready.'] });
+  });
+
+  app.get('/action-readiness', async (c: any) => {
+    const user = c.get('user');
+    const workspaceId = await selectedAccountWorkspace(c, user);
+    const accounts = await prisma.socialAccount.findMany({
+      where: { workspaceId },
+      select: { platform: true, username: true, displayName: true, isActive: true, tokenExpiresAt: true },
+    });
+    return c.json({
+      data: assessPlatformActionReadiness(accounts),
+      safeguards: [
+        'A readiness result does not publish content or schedule an action.',
+        'Every platform action still requires creator review and explicit approval.',
+      ],
+    });
   });
 
   app.get('/:id', async (c: any) => {

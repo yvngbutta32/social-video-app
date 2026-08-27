@@ -7,6 +7,7 @@ import { createAttemptIdempotencyKey, resolvePublishAttemptOutcome, validateCrea
 import { buildReachPlan } from '../src/lib/reach-plan.js';
 import { decryptToken, encryptToken } from '../src/lib/token-crypto.js';
 import { getPlatformCapability } from '../src/lib/platform-capabilities.js';
+import { assessPlatformActionReadiness } from '../src/lib/platform-action-readiness.js';
 import { buildExperimentScorecard } from '../src/lib/experiment-scorecard.js';
 import { verifyPlatformWebhook } from '../src/lib/platform-webhook-security.js';
 import { createHmac } from 'node:crypto';
@@ -38,6 +39,10 @@ async function main() {
   assert.match(getPlatformCapability('instagram')?.actionRequirements[1]?.label ?? '', /publishing authorization/i);
   assert.match(getPlatformCapability('youtube')?.actionRequirements[0]?.sourceUrl ?? '', /developers\.google\.com/);
   assert.match(getPlatformCapability('linkedin')?.actionRequirements[0]?.label ?? '', /w_member_social/);
+  const blockedReadiness = assessPlatformActionReadiness([{ platform: 'tiktok', username: 'creator', displayName: 'Creator', isActive: true, tokenExpiresAt: null }]);
+  assert.equal(blockedReadiness.find((item) => item.platform === 'tiktok')?.actionAllowed, false);
+  assert.equal(blockedReadiness.find((item) => item.platform === 'tiktok')?.state, 'official_connector_required');
+  assert(blockedReadiness.every((item) => item.safeguards.some((guardrail) => /not a promise/i.test(guardrail))));
   const webhookSecret = 'a'.repeat(32);
   process.env.TIKTOK_WEBHOOK_SECRET = webhookSecret;
   const webhookPayload = '{"event":"video.publish.complete"}';
@@ -182,6 +187,9 @@ async function main() {
   assert.match(accountRoute, /accessTokenEncrypted: _accessToken/);
   assert.match(accountRoute, /refreshTokenEncrypted: _refreshToken/);
   assert.match(accountRoute, /app\.get\('\/capabilities'/);
+  assert.match(accountRoute, /app\.get\('\/action-readiness'/);
+  assert.match(accountRoute, /selectedAccountWorkspace\(c, user\)/);
+  assert.match(accountRoute, /assessPlatformActionReadiness\(accounts\)/);
   assert.match(accountRoute, /Official .* connector is not configured yet/);
   assert.doesNotMatch(accountRoute, /return c\.json\(\{ success: true, message: 'Token refreshed'/);
 
