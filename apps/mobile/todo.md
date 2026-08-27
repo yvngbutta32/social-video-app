@@ -109,3 +109,4 @@
 - [x] Cross-examine official platform integration requirements and translate verified capability readiness into creator-facing guidance.
 - [x] Derive and present a truthful creator-action readiness decision from verified account and platform capability data.
 - [x] Publish a complete evidence-based product scope, architecture, and remaining-work roadmap.
+- [x] Replace the legacy root README with an accurate creator-authorized ViralBoost architecture and operating guide.
