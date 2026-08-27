@@ -34,6 +34,10 @@ async function main() {
   assert.equal(decryptToken(encryptedToken, 'test-encryption-key'), 'creator-access-token');
   assert.equal(getPlatformCapability('tiktok')?.officialPublishing, 'direct_post');
   assert.equal(getPlatformCapability('facebook')?.readiness, 'connector_required');
+  assert.match(getPlatformCapability('tiktok')?.actionRequirements[0]?.label ?? '', /creator-authorized/i);
+  assert.match(getPlatformCapability('instagram')?.actionRequirements[1]?.label ?? '', /publishing authorization/i);
+  assert.match(getPlatformCapability('youtube')?.actionRequirements[0]?.sourceUrl ?? '', /developers\.google\.com/);
+  assert.match(getPlatformCapability('linkedin')?.actionRequirements[0]?.label ?? '', /w_member_social/);
   const webhookSecret = 'a'.repeat(32);
   process.env.TIKTOK_WEBHOOK_SECRET = webhookSecret;
   const webhookPayload = '{"event":"video.publish.complete"}';

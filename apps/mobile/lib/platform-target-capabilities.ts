@@ -12,6 +12,7 @@ export type PlatformCapability = {
   creatorAccountRequirement: string;
   readiness: "official_connector_ready" | "connector_required";
   safeguards: string[];
+  actionRequirements: Array<{ label: string; sourceUrl: string | null }>;
 };
 
 export type WorkspacePlatformAccount = {
@@ -27,6 +28,7 @@ export type PlatformTargetConnectionState = {
   label: string;
   detail: string;
   accountName: string | null;
+  actionRequirements: Array<{ label: string; sourceUrl: string | null }>;
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -45,6 +47,10 @@ export function parsePlatformCapabilities(payload: unknown): PlatformCapability[
     const item = asObject(value);
     const platform = asTargetPlatform(item?.platform);
     if (!platform || typeof item?.label !== "string" || typeof item.creatorAccountRequirement !== "string" || !officialPublishingValues.has(item.officialPublishing as string) || !readinessValues.has(item.readiness as string) || !Array.isArray(item.safeguards) || !item.safeguards.every((guardrail) => typeof guardrail === "string")) return [];
+    const actionRequirements = Array.isArray(item.actionRequirements) ? item.actionRequirements.flatMap((requirement) => {
+      const parsed = asObject(requirement);
+      return typeof parsed?.label === "string" && (typeof parsed.sourceUrl === "string" || parsed.sourceUrl === null) ? [{ label: parsed.label, sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : null }] : [];
+    }) : [];
     return [{
       platform,
       label: item.label,
@@ -52,6 +58,7 @@ export function parsePlatformCapabilities(payload: unknown): PlatformCapability[
       creatorAccountRequirement: item.creatorAccountRequirement,
       readiness: item.readiness as PlatformCapability["readiness"],
       safeguards: item.safeguards,
+      actionRequirements,
     }];
   });
 }
@@ -84,28 +91,28 @@ export function projectPlatformTargetConnectionStates(
     const accountName = account?.displayName ?? account?.username ?? null;
 
     if (!capability) {
-      return { platform, state: "status_unavailable", label: "Connection status unavailable", detail: "The private API did not return a verified capability for this target.", accountName };
+      return { platform, state: "status_unavailable", label: "Connection status unavailable", detail: "The private API did not return a verified capability for this target.", accountName, actionRequirements: [] };
     }
 
     if (account?.connectionState === "connected") {
       const connectorDetail = capability.readiness === "official_connector_ready"
         ? "Official creator-authorized connector is available. Creator approval remains required."
         : "A creator account is connected, but the official connector still requires deployment and verification.";
-      return { platform, state: "connected", label: "Creator account connected", detail: connectorDetail, accountName };
+      return { platform, state: "connected", label: "Creator account connected", detail: connectorDetail, accountName, actionRequirements: capability.actionRequirements };
     }
 
     if (capability.officialPublishing === "not_configured") {
-      return { platform, state: "official_connector_unavailable", label: "Official connector unavailable", detail: capability.safeguards[0] ?? "No official publishing connector is configured for this target.", accountName };
+      return { platform, state: "official_connector_unavailable", label: "Official connector unavailable", detail: capability.safeguards[0] ?? "No official publishing connector is configured for this target.", accountName, actionRequirements: capability.actionRequirements };
     }
 
     if (account?.connectionState === "token_expired") {
-      return { platform, state: "connection_required", label: "Reconnect creator account", detail: "The prior creator authorization has expired. Reconnect through the official flow before any authorized action.", accountName };
+      return { platform, state: "connection_required", label: "Reconnect creator account", detail: "The prior creator authorization has expired. Reconnect through the official flow before any authorized action.", accountName, actionRequirements: capability.actionRequirements };
     }
 
     if (account?.connectionState === "revoked") {
-      return { platform, state: "connection_required", label: "Reconnect creator account", detail: "The prior creator authorization is no longer active. Reconnect through the official flow before any authorized action.", accountName };
+      return { platform, state: "connection_required", label: "Reconnect creator account", detail: "The prior creator authorization is no longer active. Reconnect through the official flow before any authorized action.", accountName, actionRequirements: capability.actionRequirements };
     }
 
-    return { platform, state: "connection_required", label: "Creator connection required", detail: capability.creatorAccountRequirement, accountName: null };
+    return { platform, state: "connection_required", label: "Creator connection required", detail: capability.creatorAccountRequirement, accountName: null, actionRequirements: capability.actionRequirements };
   });
 }

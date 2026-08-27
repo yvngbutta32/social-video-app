@@ -106,3 +106,4 @@
 - [x] Publish an evidence-based current-state product scorecard with explicit release-gate caveats.
 - [x] Project verified official-account capability states into native creator platform target selection.
 - [x] Improve native Review accessibility semantics for target selection and verified connection status.
+- [x] Cross-examine official platform integration requirements and translate verified capability readiness into creator-facing guidance.
