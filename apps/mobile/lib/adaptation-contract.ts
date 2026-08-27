@@ -22,6 +22,7 @@ export type ServerAdaptationRecipe = {
   composition: { mode: "fit" | "crop" | "blur_bg" | "smart_crop" | "smart_fill"; focalPoint: { x: number; y: number } | null };
   captions: { enabled: boolean; style: "off" | "clean" | "high_contrast" };
   headline: string | null;
+  headlinePlacement: "upper_safe" | "center_safe" | "lower_safe";
   audio: { normalize: boolean };
   provenance: { revision: number };
 };
@@ -72,13 +73,16 @@ function recipe(value: unknown): ServerAdaptationRecipe | null {
   const style = string(captions?.style);
   const normalize = audio?.normalize;
   const revision = number(provenance?.revision);
+  const headlinePlacement = string(input?.headlinePlacement);
   if (startSeconds === null || endSeconds === null || endSeconds <= startSeconds || !mode || !["fit", "crop", "blur_bg", "smart_crop", "smart_fill"].includes(mode) || typeof enabled !== "boolean" || (style !== "off" && style !== "clean" && style !== "high_contrast") || typeof normalize !== "boolean" || revision === null || !Number.isInteger(revision) || revision < 1) return null;
+  if (input?.headlinePlacement !== undefined && headlinePlacement !== "upper_safe" && headlinePlacement !== "center_safe" && headlinePlacement !== "lower_safe") return null;
   const x = number(focalPoint?.x);
   const y = number(focalPoint?.y);
   if ((x === null) !== (y === null) || (x !== null && (x < 0 || x > 1 || y === null || y < 0 || y > 1))) return null;
   const headline = input?.headline === null ? null : string(input?.headline);
   if (input?.headline !== null && input?.headline !== undefined && headline === null) return null;
-  return { sourceRange: { startSeconds, endSeconds }, composition: { mode: mode as ServerAdaptationRecipe["composition"]["mode"], focalPoint: x === null ? null : { x, y: y as number } }, captions: { enabled, style }, headline, audio: { normalize }, provenance: { revision } };
+  const resolvedHeadlinePlacement = (headlinePlacement ?? "upper_safe") as ServerAdaptationRecipe["headlinePlacement"];
+  return { sourceRange: { startSeconds, endSeconds }, composition: { mode: mode as ServerAdaptationRecipe["composition"]["mode"], focalPoint: x === null ? null : { x, y: y as number } }, captions: { enabled, style }, headline, headlinePlacement: resolvedHeadlinePlacement, audio: { normalize }, provenance: { revision } };
 }
 
 export function parseAdaptationPlan(payload: unknown): AdaptationPlan {

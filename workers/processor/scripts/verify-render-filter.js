@@ -34,5 +34,22 @@ const headlineOverlay = buildFilterComplex(verticalSpec, 1920, 1080, {
   captionText: "Creator: 100% focus\nnow",
 });
 assert.match(headlineOverlay, /Creator\\: 100\\% focus now/);
+assert.match(headlineOverlay, /y=150/);
+
+const centeredHeadlineOverlay = buildFilterComplex(verticalSpec, 1920, 1080, {
+  mode: 'fit',
+  addCaptions: true,
+  captionText: 'Center safe',
+  headlinePlacement: 'center_safe',
+});
+assert.match(centeredHeadlineOverlay, /y=\(h-text_h\)\/2/);
+
+const lowerHeadlineOverlay = buildFilterComplex(verticalSpec, 1920, 1080, {
+  mode: 'fit',
+  addCaptions: true,
+  captionText: 'Lower safe',
+  headlinePlacement: 'lower_safe',
+});
+assert.match(lowerHeadlineOverlay, /y=h-text_h-300/);
 
 console.log('Renderer focal-composition and delivery-safety contract verified.');

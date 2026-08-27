@@ -22,6 +22,7 @@ assert.equal(automatic.sourceRange.startSeconds, 0);
 assert.equal(automatic.sourceRange.endSeconds, 45);
 assert.equal(automatic.output.maxDurationSeconds, 60);
 assert.equal(automatic.provenance.sourceVideoId, sourceVideoId);
+assert.equal(automatic.headlinePlacement, 'upper_safe');
 assert.equal(parseAdaptationRecipe(automatic)?.platform, 'youtube');
 
 const manual = applyManualAdaptationEdit(automatic, {
@@ -29,6 +30,7 @@ const manual = applyManualAdaptationEdit(automatic, {
   composition: { mode: 'blur_bg', showSafeZones: false },
   captions: { enabled: false, style: 'off' },
   headline: 'Creator refined hook',
+  headlinePlacement: 'lower_safe',
   audio: { normalize: false },
 });
 
@@ -39,6 +41,7 @@ assert.equal(manual.sourceRange.endSeconds, 49.5);
 assert.equal(manual.composition.mode, 'blur_bg');
 assert.equal(manual.captions.enabled, false);
 assert.equal(manual.headline, 'Creator refined hook');
+assert.equal(manual.headlinePlacement, 'lower_safe');
 assert.equal(manual.audio.normalize, false);
 assert.equal(manual.provenance.revision, automatic.provenance.revision + 1);
 

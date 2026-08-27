@@ -6,6 +6,7 @@ export const recipePlatforms = supportedGrowthPlatforms;
 
 const compositionModes = ['fit', 'crop', 'blur_bg', 'smart_crop', 'smart_fill'] as const;
 const captionStyles = ['off', 'clean', 'high_contrast'] as const;
+const headlinePlacements = ['upper_safe', 'center_safe', 'lower_safe'] as const;
 const selectionMethods = ['full_source', 'source_start_fallback', 'scene_candidate', 'transcript_candidate', 'creator_custom'] as const;
 
 const platformOutputDefaults: Record<GrowthPlatform, { aspectRatio: string; width: number; height: number; fps: number; maxDurationSeconds: number; preferredClipSeconds: number }> = {
@@ -43,6 +44,7 @@ export const adaptationRecipeSchema = z.object({
     style: z.enum(captionStyles),
   }),
   headline: z.string().max(140).nullable(),
+  headlinePlacement: z.enum(headlinePlacements).default('upper_safe'),
   audio: z.object({
     normalize: z.boolean(),
   }),
@@ -84,6 +86,7 @@ export const manualAdaptationEditSchema = z.object({
     style: z.enum(captionStyles),
   }).optional(),
   headline: z.string().max(140).nullable().optional(),
+  headlinePlacement: z.enum(headlinePlacements).optional(),
   audio: z.object({
     normalize: z.boolean(),
   }).optional(),
@@ -132,6 +135,7 @@ export function createAutomaticAdaptationRecipe(input: {
       style: 'clean',
     },
     headline: input.headline ?? null,
+    headlinePlacement: 'upper_safe',
     audio: {
       normalize: true,
     },
@@ -161,6 +165,7 @@ export function applyManualAdaptationEdit(existing: AdaptationRecipe, edit: Manu
     composition: edit.composition ? { ...existing.composition, ...edit.composition } : existing.composition,
     captions: edit.captions ? { ...existing.captions, ...edit.captions } : existing.captions,
     headline: edit.headline === undefined ? existing.headline : edit.headline,
+    headlinePlacement: edit.headlinePlacement ?? existing.headlinePlacement,
     audio: edit.audio ? { ...existing.audio, ...edit.audio } : existing.audio,
     provenance: {
       ...existing.provenance,

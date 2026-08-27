@@ -118,3 +118,10 @@
 - [x] Verify the refreshed GitHub session and retry the blocked primary repository push.
 - [x] Add accessible precision timeline controls to Edit Lab while preserving deterministic non-destructive recipe edits.
 - [x] Add private rendered-artifact inspection and a clear Review handoff within Edit Lab.
+- [ ] Add accessible platform-safe caption placement controls to Edit Lab without changing original media.
+- [ ] Persist validated caption placement in adaptation recipe contracts across the API and native client.
+- [ ] Apply persisted caption placement in the private artifact render filter for newly rendered recipes.
+- [x] Add accessible platform-safe headline overlay placement controls with render-backed private artifacts.
+- [ ] Configure and pass a maintained processor-worker lint gate before production release.
+- [x] Add processor render-filter validation to continuous integration.
+- [ ] Remediate the processor worker’s production dependency audit findings through a tested, compatible upgrade path.

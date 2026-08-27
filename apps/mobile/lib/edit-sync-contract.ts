@@ -11,6 +11,7 @@ export function localRecipeToManualEdit(recipe: MobileEditRecipe) {
     },
     captions: { enabled: recipe.captionsEnabled, style: recipe.captionsEnabled ? "clean" : "off" },
     headline: recipe.headline.trim() || null,
+    headlinePlacement: recipe.headlinePlacement,
     audio: { normalize: recipe.normalizeAudio },
   };
 }
@@ -25,6 +26,7 @@ export function serverRecipeToLocalRecipe(sourceId: string, server: ServerAdapta
     focalX: server.composition.focalPoint?.x ?? prior.focalX,
     focalY: server.composition.focalPoint?.y ?? prior.focalY,
     headline: server.headline ?? "",
+    headlinePlacement: server.headlinePlacement,
     captionsEnabled: server.captions.enabled,
     normalizeAudio: server.audio.normalize,
     revision: server.provenance.revision,

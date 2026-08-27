@@ -20,7 +20,7 @@ describe("native adaptation contracts", () => {
   });
 
   it("accepts a server-saved non-destructive recipe only when its revision is complete", () => {
-    const recipe = { sourceRange: { startSeconds: 0, endSeconds: 12 }, composition: { mode: "smart_crop", focalPoint: { x: 0.5, y: 0.5 } }, captions: { enabled: true, style: "clean" }, headline: "Careful hook", audio: { normalize: true }, provenance: { revision: 2 } };
+    const recipe = { sourceRange: { startSeconds: 0, endSeconds: 12 }, composition: { mode: "smart_crop", focalPoint: { x: 0.5, y: 0.5 } }, captions: { enabled: true, style: "clean" }, headline: "Careful hook", headlinePlacement: "center_safe", audio: { normalize: true }, provenance: { revision: 2 } };
     expect(parseAdaptationSave({ data: { variantId: "variant-1", status: "pending", recipe, renderState: "creator_recipe_render_queued", nextStep: "Review later." } }).recipe.provenance.revision).toBe(2);
   });
 });

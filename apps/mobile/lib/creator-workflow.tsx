@@ -34,6 +34,7 @@ export type MobileEditRecipe = {
   focalX: number;
   focalY: number;
   headline: string;
+  headlinePlacement: "upper_safe" | "center_safe" | "lower_safe";
   captionsEnabled: boolean;
   normalizeAudio: boolean;
   revision: number;
@@ -63,6 +64,7 @@ export const createDefaultRecipe = (sourceId: string): MobileEditRecipe => ({
   focalX: 0.5,
   focalY: 0.42,
   headline: "",
+  headlinePlacement: "upper_safe",
   captionsEnabled: false,
   normalizeAudio: true,
   revision: 1,

@@ -49,6 +49,22 @@ jobs:
       - run: npm run lint && npm run typecheck && npm run build
       - run: npm audit --omit=dev --audit-level=high
 
+  processor:
+    name: Processor render contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/processor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workers/processor/package-lock.json
+      - run: npm ci
+      - run: npm run test:render-filter
+
   web:
     name: Web quality
     runs-on: ubuntu-latest

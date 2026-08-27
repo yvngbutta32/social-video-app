@@ -11,12 +11,21 @@ function escapeDrawtext(value) {
     .replace(/[\r\n]+/g, ' ');
 }
 
+function headlineOverlayY(placement, spec) {
+  const top = Math.max(32, Number(spec.safeZones?.top) || Math.round(spec.height * 0.12));
+  const bottom = Math.max(32, Number(spec.safeZones?.bottom) || Math.round(spec.height * 0.16));
+  if (placement === 'center_safe') return '(h-text_h)/2';
+  if (placement === 'lower_safe') return `h-text_h-${bottom}`;
+  return String(top);
+}
+
 export function buildFilterComplex(spec, inputWidth, inputHeight, options = {}) {
   const {
     mode = 'fit',
     safeZone = false,
     addCaptions = false,
     captionText = '',
+    headlinePlacement = 'upper_safe',
     focusPoint = { x: 0.5, y: 0.5 },
   } = options;
 
@@ -52,8 +61,10 @@ export function buildFilterComplex(spec, inputWidth, inputHeight, options = {}) 
   }
 
   if (addCaptions && captionText) {
-    videoFilter += `,drawtext=text='${escapeDrawtext(captionText)}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-th-100`;
+    videoFilter += `,drawtext=text='${escapeDrawtext(captionText)}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=${headlineOverlayY(headlinePlacement, spec)}`;
   }
 
   return videoFilter;
 }
+
+export { headlineOverlayY };

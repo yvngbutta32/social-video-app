@@ -13,6 +13,7 @@ describe("creator edit recipe defaults", () => {
     expect(recipe.focalX).toBeLessThanOrEqual(1);
     expect(recipe.focalY).toBeGreaterThanOrEqual(0);
     expect(recipe.focalY).toBeLessThanOrEqual(1);
+    expect(recipe.headlinePlacement).toBe("upper_safe");
     expect(recipe.revision).toBe(1);
   });
 });
