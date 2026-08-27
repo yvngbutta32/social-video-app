@@ -116,3 +116,4 @@
 - [x] Repair native web-preview contrast so the premium dark appearance uses matching foreground and surface colors.
 - [x] Restore GitHub authentication and push the completed premium native redesign to the primary repository.
 - [x] Verify the refreshed GitHub session and retry the blocked primary repository push.
+- [x] Add accessible precision timeline controls to Edit Lab while preserving deterministic non-destructive recipe edits.
