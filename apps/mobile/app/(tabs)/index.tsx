@@ -8,12 +8,23 @@ import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { useCreatorWorkflow } from "@/lib/creator-workflow";
+import { deriveCreatorFlowNextStep, sourceProgressLabel } from "@/lib/creator-flow-next-step";
 import { formatBytes, formatDuration } from "@/lib/media-format";
 
 export default function HomeScreen() {
   const colors = useColors();
-  const { sources, selectSource } = useCreatorWorkflow();
+  const { sources, selectedSourceId, selectSource, platformsFor } = useCreatorWorkflow();
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const activeSource = sources.find((source) => source.id === selectedSourceId) ?? sources[0] ?? null;
+  const activeTargetCount = activeSource ? platformsFor(activeSource.id).length : 0;
+  const nextStep = deriveCreatorFlowNextStep(activeSource, activeTargetCount);
+
+  const continueCreatorFlow = () => {
+    if (nextStep.action === "import") { setIntakeOpen(true); return; }
+    if (!activeSource) return;
+    selectSource(activeSource.id);
+    router.push((nextStep.action === "review" ? "/review" : nextStep.action === "processing" ? "/processing-detail" : "/library") as never);
+  };
 
   return (
     <ScreenContainer className="px-5" safeAreaClassName="pt-2">
@@ -39,10 +50,17 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.heroTitle}>One source. Clear next steps.</Text>
               <Text style={styles.heroCopy}>Import media you own, let private processing prepare platform-native drafts, then refine only what you want to change.</Text>
-              <Pressable onPress={() => setIntakeOpen(true)} style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}>
+              <Pressable onPress={() => setIntakeOpen(true)} accessibilityRole="button" accessibilityLabel="Add a permitted media source" accessibilityHint="Opens private source import. Media is not uploaded until you choose private workspace processing." style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}>
                 <IconSymbol name="plus.circle.fill" size={20} color="#08111F" />
                 <Text style={styles.heroActionText}>Add source</Text>
               </Pressable>
+            </CreatorCard>
+
+            <CreatorCard style={[styles.nextCard, { borderColor: `${colors.primary}55` }]}>
+              <View style={styles.nextTop}><View><Eyebrow>{nextStep.eyebrow}</Eyebrow><Text style={[styles.nextTitle, { color: colors.foreground }]}>{nextStep.title}</Text></View><View style={[styles.nextStage, { backgroundColor: `${colors.primary}1C` }]}><IconSymbol name="wand.and.stars" size={21} color={colors.primary} /></View></View>
+              <Text style={[styles.nextDetail, { color: colors.muted }]}>{nextStep.detail}</Text>
+              <Text style={[styles.journey, { color: colors.primary }]}>SOURCE  →  ADAPT  →  REFINE  →  REVIEW  →  LEARN</Text>
+              <Pressable onPress={continueCreatorFlow} accessibilityRole="button" accessibilityLabel={nextStep.actionLabel} accessibilityHint={nextStep.detail} style={({ pressed }) => [styles.nextAction, { backgroundColor: colors.primary }, pressed && styles.pressed]}><Text style={[styles.nextActionText, { color: colors.background }]}>{nextStep.actionLabel}</Text><IconSymbol name="chevron.right" size={18} color={colors.background} /></Pressable>
             </CreatorCard>
 
             <View style={styles.sectionHeading}>
@@ -51,9 +69,14 @@ export default function HomeScreen() {
             </View>
           </>
         }
-        renderItem={({ item }) => (
-          <Pressable
+        renderItem={({ item }) => {
+          const progress = sourceProgressLabel(item, platformsFor(item.id).length);
+          return (
+            <Pressable
             onPress={() => { selectSource(item.id); router.push("/library" as never); }}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${item.name}. ${progress.label.toLowerCase()}.`}
+            accessibilityHint="Opens the source library where you can upload, check processing, or review adaptations."
             style={({ pressed }) => [styles.sourcePressable, pressed && styles.pressed]}
           >
             <CreatorCard>
@@ -63,12 +86,13 @@ export default function HomeScreen() {
                   <Text numberOfLines={1} style={[styles.sourceTitle, { color: colors.foreground }]}>{item.name}</Text>
                   <Text style={[styles.sourceMeta, { color: colors.muted }]}>{formatDuration(item.durationMs)} · {formatBytes(item.size)} · {item.origin === "library" ? "Camera roll" : "Files"}</Text>
                 </View>
-                <StatusPill tone="attention">READY TO QUEUE</StatusPill>
+                <StatusPill tone={progress.tone}>{progress.label}</StatusPill>
               </View>
-              <Text style={[styles.sourceHint, { color: colors.muted }]}>Secure connection is required before private server processing starts.</Text>
+              <Text style={[styles.sourceHint, { color: colors.muted }]}>{item.status === "ready" ? platformsFor(item.id).length ? "Open targeted drafts to refine the non-destructive recipe." : "Choose platform targets to prepare adaptation drafts." : item.status === "failed" ? "Open this source to review safe recovery guidance." : "Open this source to continue the private creator workflow."}</Text>
             </CreatorCard>
-          </Pressable>
-        )}
+            </Pressable>
+          );
+        }}
         ListEmptyComponent={
           <CreatorCard style={styles.emptyCard}>
             <View style={[styles.emptyIcon, { backgroundColor: `${colors.primary}16` }]}><IconSymbol name="wand.and.stars" size={28} color={colors.primary} /></View>
@@ -94,6 +118,7 @@ const styles = StyleSheet.create({
   heroCopy: { color: "#B4D2E3", fontSize: 15, lineHeight: 22 },
   heroAction: { height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#55E6FF", borderRadius: 15 },
   heroActionText: { color: "#08111F", fontSize: 16, fontWeight: "800" },
+  nextCard: { gap: 12, padding: 18 }, nextTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, nextTitle: { marginTop: 5, fontSize: 20, lineHeight: 25, fontWeight: "800", maxWidth: 260 }, nextStage: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" }, nextDetail: { fontSize: 14, lineHeight: 20 }, journey: { fontSize: 10, letterSpacing: 0.55, fontWeight: "900" }, nextAction: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7 }, nextActionText: { fontSize: 15, fontWeight: "800" },
   sectionHeading: { marginTop: 12, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   sectionTitle: { marginTop: 4, fontSize: 21, fontWeight: "800" },
   counter: { fontSize: 13, fontWeight: "700", paddingBottom: 2 },

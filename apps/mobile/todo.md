@@ -110,3 +110,4 @@
 - [x] Derive and present a truthful creator-action readiness decision from verified account and platform capability data.
 - [x] Publish a complete evidence-based product scope, architecture, and remaining-work roadmap.
 - [x] Replace the legacy root README with an accurate creator-authorized ViralBoost architecture and operating guide.
+- [x] Realign the native creator flow around visible source-to-adaptation, editing, private review, and learning progress.
