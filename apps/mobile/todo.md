@@ -117,3 +117,4 @@
 - [x] Restore GitHub authentication and push the completed premium native redesign to the primary repository.
 - [x] Verify the refreshed GitHub session and retry the blocked primary repository push.
 - [x] Add accessible precision timeline controls to Edit Lab while preserving deterministic non-destructive recipe edits.
+- [x] Add private rendered-artifact inspection and a clear Review handoff within Edit Lab.
