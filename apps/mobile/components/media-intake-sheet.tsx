@@ -32,14 +32,15 @@ export function MediaIntakeSheet({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
-          <Text style={[styles.title, { color: colors.foreground }]}>Add a private source</Text>
+        <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: "#000000" }]}>
+          <View style={[styles.handle, { backgroundColor: `${colors.muted}88` }]} />
+          <Text style={[styles.eyebrow, { color: colors.primary }]}>Creator source</Text>
+          <Text style={[styles.title, { color: colors.foreground }]}>Start with media you own.</Text>
           <Text style={[styles.copy, { color: colors.muted }]}>Choose original media you have permission to use. The app prepares it locally first; a server queue begins only after your secure workspace connection is configured.</Text>
-          <Pressable onPress={() => choose("library")} disabled={Boolean(busy)} style={({ pressed }) => [styles.action, { backgroundColor: colors.primary }, (pressed || busy) && styles.pressed]}>
+          <Pressable onPress={() => choose("library")} disabled={Boolean(busy)} accessibilityRole="button" accessibilityLabel="Choose a video from camera roll" accessibilityHint="Imports a permitted source locally before any private workspace upload." style={({ pressed }) => [styles.action, { backgroundColor: colors.primary }, (pressed || busy) && styles.pressed]}>
             {busy === "library" ? <ActivityIndicator color={colors.background} /> : <Text style={[styles.actionText, { color: colors.background }]}>Choose from camera roll</Text>}
           </Pressable>
-          <Pressable onPress={() => choose("files")} disabled={Boolean(busy)} style={({ pressed }) => [styles.secondary, { borderColor: colors.border }, (pressed || busy) && styles.pressed]}>
+          <Pressable onPress={() => choose("files")} disabled={Boolean(busy)} accessibilityRole="button" accessibilityLabel="Import a video from Files" accessibilityHint="Imports a permitted source locally before any private workspace upload." style={({ pressed }) => [styles.secondary, { borderColor: colors.border }, (pressed || busy) && styles.pressed]}>
             {busy === "files" ? <ActivityIndicator color={colors.primary} /> : <Text style={[styles.secondaryText, { color: colors.foreground }]}>Import from Files</Text>}
           </Pressable>
           {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
@@ -51,14 +52,15 @@ export function MediaIntakeSheet({ visible, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "#00000088" },
-  sheet: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 34, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderWidth: 1, gap: 14 },
-  handle: { alignSelf: "center", height: 5, width: 42, borderRadius: 99, marginBottom: 4 },
-  title: { fontSize: 24, lineHeight: 31, fontWeight: "800" },
-  copy: { fontSize: 15, lineHeight: 22 },
-  action: { height: 54, alignItems: "center", justifyContent: "center", borderRadius: 16 },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "#020914CC" },
+  sheet: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 36, borderTopLeftRadius: 34, borderTopRightRadius: 34, borderWidth: 1, gap: 14, shadowOpacity: 0.5, shadowRadius: 30, shadowOffset: { width: 0, height: -12 }, elevation: 16 },
+  handle: { alignSelf: "center", height: 5, width: 44, borderRadius: 99, marginBottom: 7 },
+  eyebrow: { fontSize: 10, letterSpacing: 1.3, fontWeight: "900", textTransform: "uppercase" },
+  title: { fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.65 },
+  copy: { fontSize: 15, lineHeight: 23 },
+  action: { height: 56, alignItems: "center", justifyContent: "center", borderRadius: 18, shadowColor: "#55E6FF", shadowOpacity: 0.2, shadowRadius: 12, elevation: 5 },
   actionText: { fontSize: 16, fontWeight: "800" },
-  secondary: { height: 54, alignItems: "center", justifyContent: "center", borderRadius: 16, borderWidth: 1 },
+  secondary: { height: 54, alignItems: "center", justifyContent: "center", borderRadius: 17, borderWidth: 1, backgroundColor: "#13273B" },
   secondaryText: { fontSize: 16, fontWeight: "800" },
   cancel: { minHeight: 42, alignItems: "center", justifyContent: "center" },
   cancelText: { fontSize: 15, fontWeight: "700" },

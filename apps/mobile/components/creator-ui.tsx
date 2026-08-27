@@ -10,7 +10,7 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 
 export function CreatorCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const colors = useColors();
-  return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>{children}</View>;
+  return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.background }, style]}>{children}</View>;
 }
 
 export function StatusPill({ tone, children }: { tone: "ready" | "attention" | "muted" | "accent"; children: ReactNode }) {
@@ -21,12 +21,12 @@ export function StatusPill({ tone, children }: { tone: "ready" | "attention" | "
     muted: { background: `${colors.border}A0`, foreground: colors.muted },
     accent: { background: `${colors.primary}22`, foreground: colors.primary },
   }[tone];
-  return <View style={[styles.pill, { backgroundColor: palette.background }]}><Text style={[styles.pillText, { color: palette.foreground }]}>{children}</Text></View>;
+  return <View style={[styles.pill, { backgroundColor: palette.background, borderColor: `${palette.foreground}32` }]}><Text style={[styles.pillText, { color: palette.foreground }]}>{children}</Text></View>;
 }
 
 const styles = StyleSheet.create({
-  eyebrow: { fontSize: 12, fontWeight: "800", letterSpacing: 1.5, textTransform: "uppercase" },
-  card: { borderWidth: 1, borderRadius: 24, padding: 18, gap: 12 },
-  pill: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
-  pillText: { fontSize: 12, fontWeight: "800" },
+  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.45, textTransform: "uppercase" },
+  card: { borderWidth: 1, borderRadius: 26, padding: 18, gap: 12, shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 9 }, elevation: 3 },
+  pill: { alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  pillText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
 });

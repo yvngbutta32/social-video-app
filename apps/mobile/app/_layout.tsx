@@ -26,7 +26,7 @@ export default function RootLayout() {
               <Stack.Screen name="review" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
               <Stack.Screen name="edit-lab" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
             </Stack>
-            <StatusBar style="auto" />
+            <StatusBar style="light" />
           </CreatorWorkflowProvider>
         </SafeAreaProvider>
       </ThemeProvider>

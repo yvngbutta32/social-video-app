@@ -43,7 +43,7 @@ export default function HomeScreen() {
               <View style={[styles.badge, { backgroundColor: `${colors.success}1C` }]}><IconSymbol name="lock.shield.fill" size={18} color={colors.success} /></View>
             </View>
 
-            <CreatorCard style={[styles.heroCard, { backgroundColor: "#123B57", borderColor: "#2A6586" }]}>
+            <CreatorCard style={[styles.heroCard, { backgroundColor: "#0B2741", borderColor: "#2B6689" }]}>
               <View style={styles.heroTop}>
                 <View style={styles.heroIcon}><IconSymbol name="sparkles" size={24} color="#55E6FF" /></View>
                 <StatusPill tone="accent">INVITE-ONLY WORKSPACE</StatusPill>
@@ -107,26 +107,26 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 18, paddingBottom: 32, gap: 14 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 },
-  title: { marginTop: 7, fontSize: 33, lineHeight: 38, fontWeight: "800", letterSpacing: -0.8 },
-  badge: { width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  heroCard: { gap: 14, padding: 20 },
+  content: { paddingTop: 22, paddingBottom: 36, gap: 16 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 },
+  title: { marginTop: 8, fontSize: 35, lineHeight: 40, fontWeight: "800", letterSpacing: -1.15 },
+  badge: { width: 42, height: 42, borderRadius: 15, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#54D99C40" },
+  heroCard: { gap: 16, padding: 22, shadowColor: "#000000", shadowOpacity: 0.35, shadowRadius: 24, elevation: 9 },
   heroTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   heroIcon: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#0B2A40" },
-  heroTitle: { color: "#F1FAFF", fontSize: 25, lineHeight: 31, fontWeight: "800", letterSpacing: -0.5 },
-  heroCopy: { color: "#B4D2E3", fontSize: 15, lineHeight: 22 },
-  heroAction: { height: 50, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#55E6FF", borderRadius: 15 },
+  heroTitle: { color: "#F1FAFF", fontSize: 27, lineHeight: 33, fontWeight: "800", letterSpacing: -0.75 },
+  heroCopy: { color: "#BDD7E8", fontSize: 15, lineHeight: 23 },
+  heroAction: { height: 54, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#55E6FF", borderRadius: 17, shadowColor: "#55E6FF", shadowOpacity: 0.25, shadowRadius: 13, elevation: 5 },
   heroActionText: { color: "#08111F", fontSize: 16, fontWeight: "800" },
-  nextCard: { gap: 12, padding: 18 }, nextTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, nextTitle: { marginTop: 5, fontSize: 20, lineHeight: 25, fontWeight: "800", maxWidth: 260 }, nextStage: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" }, nextDetail: { fontSize: 14, lineHeight: 20 }, journey: { fontSize: 10, letterSpacing: 0.55, fontWeight: "900" }, nextAction: { minHeight: 48, borderRadius: 14, paddingHorizontal: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7 }, nextActionText: { fontSize: 15, fontWeight: "800" },
-  sectionHeading: { marginTop: 12, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
-  sectionTitle: { marginTop: 4, fontSize: 21, fontWeight: "800" },
-  counter: { fontSize: 13, fontWeight: "700", paddingBottom: 2 },
+  nextCard: { gap: 13, padding: 20, backgroundColor: "#0C1B2D" }, nextTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, nextTitle: { marginTop: 6, fontSize: 22, lineHeight: 27, fontWeight: "800", letterSpacing: -0.45, maxWidth: 255 }, nextStage: { width: 44, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" }, nextDetail: { fontSize: 14, lineHeight: 21 }, journey: { fontSize: 10, letterSpacing: 0.85, fontWeight: "900", marginTop: 1 }, nextAction: { minHeight: 52, borderRadius: 16, paddingHorizontal: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 7 }, nextActionText: { fontSize: 15, fontWeight: "900" },
+  sectionHeading: { marginTop: 14, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
+  sectionTitle: { marginTop: 5, fontSize: 22, fontWeight: "800", letterSpacing: -0.35 },
+  counter: { fontSize: 12, fontWeight: "800", paddingBottom: 3 },
   sourcePressable: { marginTop: 2 },
   sourceTop: { flexDirection: "row", alignItems: "center", gap: 12 },
-  videoGlyph: { width: 48, height: 48, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  videoGlyph: { width: 50, height: 50, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   sourceCopyWrap: { flex: 1, gap: 4 },
-  sourceTitle: { fontSize: 16, fontWeight: "800" },
+  sourceTitle: { fontSize: 16, fontWeight: "800", letterSpacing: -0.15 },
   sourceMeta: { fontSize: 12, lineHeight: 17 },
   sourceHint: { fontSize: 13, lineHeight: 18 },
   emptyCard: { alignItems: "center", paddingVertical: 28, marginTop: 2 },

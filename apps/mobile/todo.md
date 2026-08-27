@@ -111,3 +111,6 @@
 - [x] Publish a complete evidence-based product scope, architecture, and remaining-work roadmap.
 - [x] Replace the legacy root README with an accurate creator-authorized ViralBoost architecture and operating guide.
 - [x] Realign the native creator flow around visible source-to-adaptation, editing, private review, and learning progress.
+- [x] Restore and verify the unavailable native project preview.
+- [x] Redesign the native creator interface with a premium visual system and stronger iOS-first hierarchy.
+- [x] Repair native web-preview contrast so the premium dark appearance uses matching foreground and surface colors.
