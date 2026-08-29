@@ -88,9 +88,11 @@ export function buildGrowthExperimentPlan(input: {
   platforms: GrowthPlatform[];
   objective: GrowthObjective;
   transcript?: string | null;
+  creatorBrief?: string | null;
 }): GrowthExperimentPlan[] {
   const source = normalizeTitle(input.sourceTitle);
   const sourcePhrase = limitText(source, 76);
+  const creatorBrief = limitText(input.creatorBrief?.replace(/\s+/g, ' ').trim() ?? '', 180);
   const objectivePhrase: Record<GrowthObjective, string> = {
     views: 'early qualified attention',
     engagement: 'meaningful engagement',
@@ -109,10 +111,14 @@ export function buildGrowthExperimentPlan(input: {
       aspectRatio: detail.aspectRatio,
       hook,
       caption: `${detail.captionPrefix} ${sourcePhrase}. The goal is to test for ${objectivePhrase[input.objective]} while staying true to the original point of view.`,
-      hypothesis: `For ${platform}, adapting “${sourcePhrase}” with a platform-native opening and a focused proof sequence may improve ${objectivePhrase[input.objective]} relative to the creator’s recent baseline.`,
+      hypothesis: `For ${platform}, adapting “${sourcePhrase}” with a platform-native opening and a focused proof sequence${creatorBrief ? ` that follows the creator direction “${creatorBrief}”` : ''} may improve ${objectivePhrase[input.objective]} relative to the creator’s recent baseline.`,
       learningQuestion: detail.learningQuestion,
       recommendedWindow: detail.window,
-      changes: transcriptSignal ? [...detail.changes, `Preserve the source language: “${transcriptSignal}…”`] : detail.changes,
+      changes: [
+        ...detail.changes,
+        ...(creatorBrief ? [`Honor the creator direction: “${creatorBrief}”`] : []),
+        ...(transcriptSignal ? [`Preserve the source language: “${transcriptSignal}…”`] : []),
+      ],
       safeguards: [
         'This is an organic experiment, not a guarantee of distribution or virality.',
         'The creator retains approval before any version is queued for publishing.',

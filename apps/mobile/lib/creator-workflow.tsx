@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 
 import type { LocalCreatorMedia } from "./media-import";
+import { normalizeAdaptationBrief } from "./adaptation-brief";
 import { loadCreatorState, saveCreatorState } from "./creator-storage";
 import { reconcileWorkspaceSources, type WorkspaceSourceSummary } from "./source-sync-contract";
 
@@ -24,6 +25,7 @@ export type MobileSource = Omit<LocalCreatorMedia, "uri" | "origin"> & {
   serverVideoId?: string;
   uploadError?: string;
   multipartUpload?: MultipartUploadRecovery;
+  adaptationBrief?: string;
 };
 
 export type MobileEditRecipe = {
@@ -52,6 +54,8 @@ type CreatorWorkflowContextValue = {
   syncWorkspaceSources: (sources: WorkspaceSourceSummary[]) => void;
   platformsFor: (sourceId: string) => CreatorTargetPlatform[];
   setPlatformTargets: (sourceId: string, platforms: CreatorTargetPlatform[]) => void;
+  briefFor: (sourceId: string) => string;
+  setAdaptationBrief: (sourceId: string, brief: string) => void;
 };
 
 const CreatorWorkflowContext = createContext<CreatorWorkflowContextValue | null>(null);
@@ -95,7 +99,7 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
 
   const addLocalSource = useCallback((media: LocalCreatorMedia) => {
     const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const source: MobileSource = { ...media, id, importedAt: new Date().toISOString(), status: "ready_to_queue" };
+    const source: MobileSource = { ...media, id, importedAt: new Date().toISOString(), status: "ready_to_queue", adaptationBrief: "" };
     setSources((current) => [source, ...current]);
     setSelectedSourceId(id);
     setRecipes((current) => ({ ...current, [id]: createDefaultRecipe(id) }));
@@ -139,6 +143,13 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     setPlatformTargetsState((current) => ({ ...current, [sourceId]: unique }));
   }, []);
 
+  const briefFor = useCallback((sourceId: string) => sources.find((source) => source.id === sourceId)?.adaptationBrief ?? "", [sources]);
+
+  const setAdaptationBrief = useCallback((sourceId: string, brief: string) => {
+    const adaptationBrief = normalizeAdaptationBrief(brief);
+    setSources((current) => current.map((source) => source.id === sourceId ? { ...source, adaptationBrief } : source));
+  }, []);
+
   const value = useMemo(() => ({
     sources,
     selectedSourceId,
@@ -151,7 +162,9 @@ export function CreatorWorkflowProvider({ children }: PropsWithChildren) {
     syncWorkspaceSources,
     platformsFor,
     setPlatformTargets,
-  }), [addLocalSource, platformsFor, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, setPlatformTargets, sources, syncWorkspaceSources, updateSource]);
+    briefFor,
+    setAdaptationBrief,
+  }), [addLocalSource, briefFor, platformsFor, recipeFor, replaceRecipe, saveRecipe, selectedSourceId, setAdaptationBrief, setPlatformTargets, sources, syncWorkspaceSources, updateSource]);
 
   return <CreatorWorkflowContext.Provider value={value}>{children}</CreatorWorkflowContext.Provider>;
 }

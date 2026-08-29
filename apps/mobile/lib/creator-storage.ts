@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { creatorTargetPlatforms, type CreatorTargetPlatform, type MobileEditRecipe, type MobileSource } from "./creator-workflow";
+import { normalizeAdaptationBrief } from "./adaptation-brief";
 
 const CREATOR_STATE_KEY = "viralboost.creator.local-state.v1";
 
@@ -32,7 +33,7 @@ export function parseCreatorState(raw: string | null): PersistedCreatorState | n
     const rawTargets = parsed.platformTargets && typeof parsed.platformTargets === "object" ? parsed.platformTargets : {};
     const platformTargets = Object.fromEntries(Object.entries(rawTargets).map(([sourceId, targets]) => [sourceId, Array.isArray(targets) ? targets.filter((target): target is CreatorTargetPlatform => typeof target === "string" && creatorTargetPlatforms.includes(target as CreatorTargetPlatform)) : []]));
     return {
-      sources: parsed.sources,
+      sources: parsed.sources.map((source) => ({ ...source, adaptationBrief: normalizeAdaptationBrief(source.adaptationBrief) })),
       recipes,
       selectedSourceId: typeof parsed.selectedSourceId === "string" ? parsed.selectedSourceId : null,
       platformTargets,

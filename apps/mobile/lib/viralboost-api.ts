@@ -7,6 +7,7 @@ import { parseProcessingDiagnostic } from "@/lib/processing-contract";
 import { parseWorkspaceSources } from "@/lib/source-sync-contract";
 import { parseWorkspaceActivity } from "@/lib/workspace-activity-contract";
 import { parsePlatformActionReadiness, type PlatformTargetConnectionState } from "@/lib/platform-target-capabilities";
+import { normalizeAdaptationBrief } from "@/lib/adaptation-brief";
 import type { CreatorTargetPlatform } from "@/lib/creator-workflow";
 import { clearSecureSession, getSecureSession, saveSecureSession } from "@/lib/secure-session";
 
@@ -131,12 +132,12 @@ export async function getPlatformTargetConnectionStates(): Promise<PlatformTarge
   return parsePlatformActionReadiness(await response.json());
 }
 
-export async function prepareAdaptationPlan(videoId: string, platforms: CreatorTargetPlatform[]) {
+export async function prepareAdaptationPlan(videoId: string, platforms: CreatorTargetPlatform[], creatorBrief = "") {
   if (!platforms.length) throw new Error("Choose at least one creator platform before preparing an adaptation plan.");
   const response = await viralBoostRequest("/api/v1/growth/experiment-plan", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ videoId, platforms, objective: "retention" }),
+    body: JSON.stringify({ videoId, platforms, objective: "retention", creatorBrief: normalizeAdaptationBrief(creatorBrief) }),
   });
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseAdaptationPlan(await response.json());

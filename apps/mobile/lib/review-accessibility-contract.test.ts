@@ -11,5 +11,8 @@ describe("native Review accessibility contract", () => {
     expect(review).toContain('accessibilityLiveRegion="polite"');
     expect(review).toContain('accessibilityLabel="Refresh verified adaptation plan"');
     expect(review).toContain("It does not publish content.");
+    expect(review).toContain('accessibilityLabel="Creator direction for private adaptation drafts"');
+    expect(review).toContain('accessibilityLabel="Save creator direction"');
+    expect(review).toContain("It does not instruct a platform, publish, or guarantee an outcome.");
   });
 });

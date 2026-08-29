@@ -11,6 +11,7 @@ export type AdaptationExperiment = {
 export type AdaptationPlan = {
   sourceVideoId: string;
   objective: string;
+  creatorBrief: string;
   experiments: AdaptationExperiment[];
   missingPlatforms: string[];
   nextStep: string;
@@ -103,7 +104,7 @@ export function parseAdaptationPlan(payload: unknown): AdaptationPlan {
   }) : null;
   const nextStep = string(data?.nextStep);
   if (!sourceVideoId || !objective || !experiments || !nextStep) throw new Error("The adaptation plan was incomplete. Refresh after private processing finishes.");
-  return { sourceVideoId, objective, experiments, missingPlatforms: strings(data?.missingPlatforms), nextStep, safeguards: strings(data?.safeguards) };
+  return { sourceVideoId, objective, creatorBrief: string(data?.creatorBrief) ?? "", experiments, missingPlatforms: strings(data?.missingPlatforms), nextStep, safeguards: strings(data?.safeguards) };
 }
 
 export function parseAdaptationDetail(payload: unknown): AdaptationDetail {

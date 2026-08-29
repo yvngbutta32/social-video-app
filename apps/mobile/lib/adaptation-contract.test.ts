@@ -4,8 +4,9 @@ import { artifactStateLabel, parseAdaptationDetail, parseAdaptationPlan, parseAd
 
 describe("native adaptation contracts", () => {
   it("accepts a complete server-authorized adaptation plan", () => {
-    const plan = parseAdaptationPlan({ data: { sourceVideoId: "source-1", objective: "retention", experiments: [{ variantId: "variant-1", platform: "tiktok", hook: "A concise hook", caption: "A careful caption", aspectRatio: "9:16", availability: "variant_rendering_required", destination: null }], missingPlatforms: [], nextStep: "Review it.", safeguards: ["Creator approval required."] } });
+    const plan = parseAdaptationPlan({ data: { sourceVideoId: "source-1", objective: "retention", creatorBrief: "Keep it practical", experiments: [{ variantId: "variant-1", platform: "tiktok", hook: "A concise hook", caption: "A careful caption", aspectRatio: "9:16", availability: "variant_rendering_required", destination: null }], missingPlatforms: [], nextStep: "Review it.", safeguards: ["Creator approval required."] } });
     expect(plan.experiments[0].variantId).toBe("variant-1");
+    expect(plan.creatorBrief).toBe("Keep it practical");
   });
 
   it("distinguishes a current rendered artifact from a missing artifact", () => {

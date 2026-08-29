@@ -24,6 +24,9 @@ async function main() {
   assert.equal(plan.length, 3);
   assert.deepEqual(plan.map((experiment) => experiment.platform), ['tiktok', 'instagram', 'youtube']);
   assert.equal(new Set(plan.map((experiment) => experiment.platform)).size, plan.length);
+  const briefPlan = buildGrowthExperimentPlan({ sourceTitle: 'Source', platforms: ['tiktok'], objective: 'retention', creatorBrief: 'Keep the proof practical for first-time founders.' });
+  assert.match(briefPlan[0].hypothesis, /Keep the proof practical for first-time founders/);
+  assert(briefPlan[0].changes.some((change) => /Honor the creator direction/i.test(change)));
 
   const reachPlan = buildReachPlan({ sourceTitle: 'Source', platforms: ['tiktok', 'instagram', 'youtube'], objective: 'retention', activeDestinations: 2 });
   assert.deepEqual(reachPlan.steps.map((step) => step.type), ['creator_authorized_publish', 'authorized_cross_platform', 'creator_owned_share_loop', 'creator_approved_collaboration', 'evidence_checkpoint']);
@@ -170,7 +173,8 @@ async function main() {
   assert.match(growthRoute, /variant_rendering_required/);
   assert.match(growthRoute, /variantId/);
   assert.match(growthRoute, /generationParams/);
-  assert.match(growthRoute, /existingRendered/);
+  assert.match(growthRoute, /creatorBrief/);
+  assert.match(growthRoute, /briefFingerprint/);
   assert.match(growthRoute, /processor_variant_ready/);
   assert.match(growthRoute, /learning-signal/);
   assert.match(growthRoute, /evaluateLearningSignal/);

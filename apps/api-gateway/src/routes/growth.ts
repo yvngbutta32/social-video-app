@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
+import { createHash } from 'node:crypto';
 
 import type { Variables } from '../index.js';
 import { prisma } from '../lib/prisma.js';
@@ -35,6 +36,7 @@ const sourceSchema = z.object({
 const planSchema = sourceSchema.extend({
   platforms: z.array(z.enum(supportedGrowthPlatforms)).min(1).max(supportedGrowthPlatforms.length),
   objective: z.enum(['views', 'engagement', 'followers', 'retention']).default('retention'),
+  creatorBrief: z.string().trim().max(280).optional().default(''),
 });
 
 const learningQuerySchema = z.object({
@@ -171,13 +173,14 @@ export function createGrowthRoutes() {
       transcript: video.transcript,
       platforms: requestedPlatforms,
       objective: input.objective as GrowthObjective,
+      creatorBrief: input.creatorBrief,
     });
+    const briefFingerprint = createHash('sha256').update(input.creatorBrief).digest('hex').slice(0, 16);
     const persistedVariants = await prisma.$transaction(async (tx) => Promise.all(experiments.map(async (experiment) => {
-      const planKey = `${video.id}:${experiment.platform}:${input.objective}`;
+      const planKey = `${video.id}:${experiment.platform}:${input.objective}:${briefFingerprint}`;
       const candidates = await tx.videoVariant.findMany({ where: { videoId: video.id, platform: experiment.platform }, orderBy: { createdAt: 'desc' }, select: { id: true, generationParams: true, status: true, minioObjectKey: true } });
       const existingPlanned = candidates.find((candidate) => (candidate.generationParams as { planKey?: string } | null)?.planKey === planKey);
-      const existingRendered = candidates.find((candidate) => candidate.status === 'ready' && candidate.minioObjectKey);
-      const existing = existingPlanned || existingRendered;
+      const existing = existingPlanned;
       if (existing) {
         const priorParams = (existing.generationParams as Record<string, unknown> | null) ?? {};
         const adaptationRecipe = parseAdaptationRecipe(priorParams.adaptationRecipe) ?? createAutomaticAdaptationRecipe({
@@ -186,7 +189,7 @@ export function createGrowthRoutes() {
           durationSeconds: video.durationSeconds,
           headline: experiment.hook,
         });
-        return tx.videoVariant.update({ where: { id: existing.id }, data: { variantType: experiment.variantType, hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { ...priorParams, planKey, objective: input.objective, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: existing.status === 'ready' ? 'processor_variant_ready' : 'processor_variant_render_required' } }, select: { id: true, status: true } });
+        return tx.videoVariant.update({ where: { id: existing.id }, data: { variantType: experiment.variantType, hookText: experiment.hook, caption: experiment.caption, aspectRatio: experiment.aspectRatio, generationParams: { ...priorParams, planKey, objective: input.objective, creatorBrief: input.creatorBrief, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: existing.status === 'ready' ? 'processor_variant_ready' : 'processor_variant_render_required' } }, select: { id: true, status: true } });
       }
       const adaptationRecipe = createAutomaticAdaptationRecipe({
         platform: experiment.platform,
@@ -194,7 +197,7 @@ export function createGrowthRoutes() {
         durationSeconds: video.durationSeconds,
         headline: experiment.hook,
       });
-      return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
+      return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, creatorBrief: input.creatorBrief, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
     })));
     const experimentsWithVariants = experiments.map((experiment, index) => {
       const destination = accounts.find((account) => account.platform === experiment.platform) ?? null;
@@ -206,6 +209,7 @@ export function createGrowthRoutes() {
       data: {
         sourceVideoId: video.id,
         objective: input.objective,
+        creatorBrief: input.creatorBrief,
         experiments: experimentsWithVariants,
         missingPlatforms,
         nextStep: missingPlatforms.length > 0
@@ -213,6 +217,7 @@ export function createGrowthRoutes() {
           : 'Review the planned experiments. Variants must finish rendering before explicit creator approval can prepare them for publishing.',
         safeguards: [
           'The system prepares creator-specific hypotheses and does not guarantee reach, virality, or platform placement.',
+          'A creator brief is private editorial direction for draft preparation; it does not instruct a platform or guarantee an outcome.',
           'No experiment is scheduled or published by this endpoint.',
           'Approved publishing requires a rendered variant, separate creator action, and active connected account.',
           'Planning creates a pending variant record; it does not claim that media rendering has completed.',
