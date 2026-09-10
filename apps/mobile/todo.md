@@ -121,3 +121,13 @@
 - [x] Reconcile the active native workspace with the primary repository before further feature work.
 - [x] Verify and synchronize all intended active native source changes to the primary GitHub repository.
 - [x] Perform a final active-workspace and GitHub origin/main synchronization audit.
+- [x] Publish the current capability inventory and prioritized 10/10 roadmap assessment.
+
+# End of roadmap
+- [ ] Build a provider-neutral official connector action contract with explicit approval, idempotency, and failure boundaries.
+- [x] Reconcile available active and primary source trees before continuing connector implementation.
+
+# End of roadmap
+- [x] Materialize and compare a real Git checkout of yvngbutta32/social-video-app before declaring source synchronization complete.
+
+# End of roadmap
