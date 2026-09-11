@@ -131,3 +131,25 @@
 - [x] Materialize and compare a real Git checkout of yvngbutta32/social-video-app before declaring source synchronization complete.
 
 # End of roadmap
+
+- [ ] Add transcript-backed timed-caption domain contracts with deterministic timing normalization and revision boundaries.
+- [ ] Integrate timed-caption editing into the native Edit Lab with accessible segment controls and non-destructive recipe persistence.
+- [ ] Build a provider-neutral official connector action contract with explicit approval, idempotency, authorization, and failure boundaries.
+- [ ] Validate timed-caption and connector contracts across native and server test gates, then synchronize the implementation to GitHub.
+- [ ] Save a managed checkpoint for the timed-caption and connector milestone.
+
+# End of roadmap
+
+- [x] Reconcile the current build state and implementation documentation for the state-of-the-art milestone.
+- [ ] Implement transcript-backed timed-caption editing with multilingual and accessibility-aware controls.
+- [x] Implement the provider-neutral official publishing action contract with approval, idempotency, reconciliation, and failure boundaries.
+- [ ] Strengthen transparent creator automation, first-party amplification surfaces, analytics provenance, and premium workflow polish.
+- [ ] Run full native/API/worker validation and synchronize the completed milestone to GitHub.
+- [ ] Save a managed checkpoint for the state-of-the-art milestone.
+
+# End of roadmap
+
+- [x] Maintain an evidence register linking each major feature, UX decision, platform claim, and marketing statement to authoritative research, platform documentation, creator evidence, or deterministic tests.
+- [x] Ensure each delivered milestone documents implemented behavior, hypothesis, evidence strength, and known limitations.
+
+# End of roadmap

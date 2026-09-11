@@ -4,6 +4,7 @@ import type { LocalCreatorMedia } from "./media-import";
 import { normalizeAdaptationBrief } from "./adaptation-brief";
 import { loadCreatorState, saveCreatorState } from "./creator-storage";
 import { reconcileWorkspaceSources, type WorkspaceSourceSummary } from "./source-sync-contract";
+import type { TimedCaptionTrack } from "./timed-caption-contract";
 
 export type SourceStatus = "ready_to_queue" | "uploading" | "processing" | "ready" | "failed" | "archived";
 export const creatorTargetPlatforms = ["tiktok", "instagram", "youtube", "linkedin"] as const;
@@ -38,6 +39,7 @@ export type MobileEditRecipe = {
   headline: string;
   headlinePlacement: "upper_safe" | "center_safe" | "lower_safe";
   captionsEnabled: boolean;
+  timedCaptionTrack?: TimedCaptionTrack;
   normalizeAudio: boolean;
   revision: number;
 };
@@ -70,6 +72,7 @@ export const createDefaultRecipe = (sourceId: string): MobileEditRecipe => ({
   headline: "",
   headlinePlacement: "upper_safe",
   captionsEnabled: false,
+  timedCaptionTrack: undefined,
   normalizeAudio: true,
   revision: 1,
 });
