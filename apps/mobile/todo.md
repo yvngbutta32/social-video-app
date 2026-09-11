@@ -124,7 +124,7 @@
 - [x] Publish the current capability inventory and prioritized 10/10 roadmap assessment.
 
 # End of roadmap
-- [ ] Build a provider-neutral official connector action contract with explicit approval, idempotency, and failure boundaries.
+- [x] Build a provider-neutral official connector action contract with explicit approval, idempotency, and failure boundaries.
 - [x] Reconcile available active and primary source trees before continuing connector implementation.
 
 # End of roadmap
@@ -132,10 +132,10 @@
 
 # End of roadmap
 
-- [ ] Add transcript-backed timed-caption domain contracts with deterministic timing normalization and revision boundaries.
-- [ ] Integrate timed-caption editing into the native Edit Lab with accessible segment controls and non-destructive recipe persistence.
-- [ ] Build a provider-neutral official connector action contract with explicit approval, idempotency, authorization, and failure boundaries.
-- [ ] Validate timed-caption and connector contracts across native and server test gates, then synchronize the implementation to GitHub.
+- [x] Add transcript-backed timed-caption domain contracts with deterministic timing normalization and revision boundaries.
+- [x] Integrate timed-caption editing into the native Edit Lab with accessible segment controls and non-destructive recipe persistence.
+- [x] Build a provider-neutral official connector action contract with explicit approval, idempotency, authorization, and failure boundaries.
+- [x] Validate timed-caption and connector contracts across native and server test gates, then synchronize the implementation to GitHub.
 - [ ] Save a managed checkpoint for the timed-caption and connector milestone.
 
 # End of roadmap
