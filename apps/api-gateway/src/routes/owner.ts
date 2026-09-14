@@ -90,7 +90,7 @@ export function createOwnerRoutes() {
     });
 
     const clients = workspaces
-      .map((workspace) => ({
+      .map((workspace: any) => ({
         id: workspace.id,
         name: workspace.name,
         slug: workspace.slug,
@@ -98,13 +98,13 @@ export function createOwnerRoutes() {
         publishingPaused: Boolean((workspace.settings as any)?.publishingPaused),
         client: workspace.members[0]?.user || null,
         clientJoinedAt: workspace.members[0]?.joinedAt || null,
-        connectedPlatforms: workspace.socialAccounts.filter((account) => account.isActive).map((account) => account.platform),
+        connectedPlatforms: workspace.socialAccounts.filter((account: any) => account.isActive).map((account: any) => account.platform),
         latestVideo: workspace.videos[0] || null,
         counts: workspace._count,
         createdAt: workspace.createdAt,
         updatedAt: workspace.updatedAt,
       }))
-      .filter((workspace) => !status || workspace.status === status);
+      .filter((workspace: any) => !status || workspace.status === status);
 
     return c.json({ data: clients });
   });
@@ -127,7 +127,7 @@ export function createOwnerRoutes() {
     }
 
     const expiresAt = new Date(Date.now() + body.expiresInDays * 24 * 60 * 60 * 1000);
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const workspace = await tx.workspace.create({
         data: {
           name: body.clientName,

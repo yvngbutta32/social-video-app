@@ -108,7 +108,7 @@ export function createAuthRoutes() {
 
     const hashedPassword = await bcrypt.hash(body.password, 12);
     const workspaceRole = invite.role === 'creator' ? 'owner' : invite.role;
-    const user = await prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx: any) => {
       const createdUser = await tx.user.create({
         data: {
           email: normalizedEmail,

@@ -32,7 +32,9 @@
     "test:workspace-selection-audit": "tsx scripts/verify-workspace-selection-audit.ts",
     "test:workspace-activity": "tsx scripts/verify-workspace-activity.ts",
     "test:owner-operational-health": "tsx scripts/verify-owner-operational-health.ts",
-    "test:official-action-contract": "tsx scripts/verify-official-action-contract.ts"
+    "test:official-action-contract": "tsx scripts/verify-official-action-contract.ts",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "postinstall": "npm run prisma:generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1117.0",

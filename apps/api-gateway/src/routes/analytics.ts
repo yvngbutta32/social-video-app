@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import type { Prisma } from '@prisma/client';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { HTTPException } from 'hono/http-exception';
@@ -59,8 +58,10 @@ export function createAnalyticsRoutes() {
     const platformBreakdown = new Map<string, ReturnType<typeof summarizeMetricSnapshots>>();
     const trendBreakdown = new Map<string, { date: string; platform: string; metrics: typeof metrics }>();
     for (const metric of metrics) {
-      const video = metric.scheduledPost.variant.video;
-      const existingVideo = topVideosById.get(video.id) || { id: video.id, title: video.title || 'Untitled source', thumbnailUrl: metric.scheduledPost.variant.thumbnailObjectKey, totalViews: 0, totalEngagement: 0 };
+      const video = metric.scheduledPost?.variant?.video;
+      const variant = metric.scheduledPost?.variant;
+      if (!video || !variant) continue;
+      const existingVideo = topVideosById.get(video.id) || { id: video.id, title: video.title || 'Untitled source', thumbnailUrl: variant.thumbnailObjectKey ?? null, totalViews: 0, totalEngagement: 0 };
       existingVideo.totalViews += numberValue(metric.views);
       existingVideo.totalEngagement += numberValue(metric.likes) + numberValue(metric.comments) + numberValue(metric.shares);
       topVideosById.set(video.id, existingVideo);
@@ -227,11 +228,11 @@ export function createAnalyticsRoutes() {
     const metrics = latestMetricSnapshots(observedMetrics);
     const campaigns = new Map<string, { id: string; name: string; status: string; hypothesis: string | null; startedAt: Date; completedAt: Date | null; metrics: typeof metrics; variantIds: Set<string> }>();
     for (const metric of metrics) {
-      const campaign = metric.scheduledPost.abTest;
+      const campaign = metric.scheduledPost?.abTest;
       if (!campaign) continue;
       const current = campaigns.get(campaign.id) || { id: campaign.id, name: campaign.name, status: campaign.status, hypothesis: campaign.hypothesis, startedAt: campaign.startedAt, completedAt: campaign.completedAt, metrics: [] as typeof metrics, variantIds: new Set<string>() };
       current.metrics.push(metric);
-      current.variantIds.add(metric.scheduledPost.variantId);
+      if (metric.scheduledPost?.variantId) current.variantIds.add(metric.scheduledPost.variantId);
       campaigns.set(campaign.id, current);
     }
     const campaignMetrics = [...campaigns.values()].map((campaign) => {
@@ -270,8 +271,8 @@ export function createAnalyticsRoutes() {
     const metrics = latestMetricSnapshots(observedMetrics);
     const accounts = new Map<string, { id: string; platform: string; username: string; displayName: string | null; followerCount: number; metrics: typeof metrics; postIds: Set<string> }>();
     for (const metric of metrics) {
-      const account = metric.scheduledPost.socialAccount;
-      if (!account.isActive) continue;
+      const account = metric.scheduledPost?.socialAccount;
+      if (!account || !account.isActive) continue;
       const current = accounts.get(account.id) || { id: account.id, platform: account.platform, username: account.username || 'unknown', displayName: account.displayName, followerCount: account.followerCount, metrics: [] as typeof metrics, postIds: new Set<string>() };
       current.metrics.push(metric);
       current.postIds.add(metric.scheduledPostId);
@@ -374,7 +375,7 @@ export function createAnalyticsRoutes() {
     
     const where = buildAnalyticsMetricWhere(workspaceId, startDate, endDate, query);
     if (query.contentType) {
-      const existingScheduledPostFilter = where.scheduledPost as Prisma.ScheduledPostWhereInput | undefined;
+      const existingScheduledPostFilter = where.scheduledPost as { AND: Record<string, unknown>[] } | undefined;
       where.scheduledPost = {
         AND: [
           ...(existingScheduledPostFilter ? [existingScheduledPostFilter] : []),
@@ -473,7 +474,7 @@ export function createAnalyticsRoutes() {
         activeViewers,
         currentViews,
         currentEngagement,
-        topVideosNow: topVideosNow.map(v => ({
+        topVideosNow: topVideosNow.map((v: { id: string; title: string | null; variants: { thumbnailObjectKey: string | null }[] }) => ({
           id: v.id,
           title: v.title,
           thumbnailUrl: v.variants[0]?.thumbnailObjectKey,

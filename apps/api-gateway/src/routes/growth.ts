@@ -20,6 +20,10 @@ import { buildReachPlan } from '../lib/reach-plan.js';
 import { metricFreshness } from '../lib/metric-ingestion.js';
 import { enqueueVariantRendering } from '../lib/processing-dispatch.js';
 import { createPrivatePreviewUrl } from '../lib/source-storage.js';
+
+type ReadinessScheduledPost = { status: 'draft' | 'scheduled' | 'posting' | 'posted' | 'failed' | 'cancelled'; retryCount: number; errorMessage?: string | null };
+type LearningRouteMetric = { views?: number | bigint | string | { toString(): string } | null; likes?: number | bigint | string | { toString(): string } | null; comments?: number | bigint | string | { toString(): string } | null; shares?: number | bigint | string | { toString(): string } | null; saves?: number | bigint | string | { toString(): string } | null; followerGain?: number | bigint | string | { toString(): string } | null; completionRate?: number | bigint | string | { toString(): string } | null };
+type ScorecardRouteMetric = LearningRouteMetric & { scheduledPostId: string; variantId?: string | null; platform: string; recordedAt: Date; importedAt: Date | null; provenance: unknown };
 import { createClipCandidates, extractClipAnalysis } from '../lib/clip-candidates.js';
 import {
   adaptationRecipeSchema,
@@ -165,7 +169,7 @@ export function createGrowthRoutes() {
       select: { id: true, platform: true, username: true, displayName: true },
     });
 
-    const connectedPlatforms = new Set(accounts.map((account) => account.platform));
+    const connectedPlatforms = new Set(accounts.map((account: { platform: string }) => account.platform));
     const requestedPlatforms = input.platforms as GrowthPlatform[];
     const missingPlatforms = requestedPlatforms.filter((platform: GrowthPlatform) => !connectedPlatforms.has(platform));
     const experiments = buildGrowthExperimentPlan({
@@ -176,10 +180,10 @@ export function createGrowthRoutes() {
       creatorBrief: input.creatorBrief,
     });
     const briefFingerprint = createHash('sha256').update(input.creatorBrief).digest('hex').slice(0, 16);
-    const persistedVariants = await prisma.$transaction(async (tx) => Promise.all(experiments.map(async (experiment) => {
+    const persistedVariants = await prisma.$transaction(async (tx: any) => Promise.all(experiments.map(async (experiment) => {
       const planKey = `${video.id}:${experiment.platform}:${input.objective}:${briefFingerprint}`;
       const candidates = await tx.videoVariant.findMany({ where: { videoId: video.id, platform: experiment.platform }, orderBy: { createdAt: 'desc' }, select: { id: true, generationParams: true, status: true, minioObjectKey: true } });
-      const existingPlanned = candidates.find((candidate) => (candidate.generationParams as { planKey?: string } | null)?.planKey === planKey);
+      const existingPlanned = candidates.find((candidate: { generationParams: unknown }) => (candidate.generationParams as { planKey?: string } | null)?.planKey === planKey);
       const existing = existingPlanned;
       if (existing) {
         const priorParams = (existing.generationParams as Record<string, unknown> | null) ?? {};
@@ -200,7 +204,7 @@ export function createGrowthRoutes() {
       return tx.videoVariant.create({ data: { videoId: video.id, variantType: experiment.variantType, aspectRatio: experiment.aspectRatio, hookText: experiment.hook, caption: experiment.caption, platform: experiment.platform, status: 'pending', generationParams: { planKey, objective: input.objective, creatorBrief: input.creatorBrief, sourceVideoId: video.id, adaptationRecipe, renderingBoundary: 'processor_variant_render_required' } }, select: { id: true, status: true } });
     })));
     const experimentsWithVariants = experiments.map((experiment, index) => {
-      const destination = accounts.find((account) => account.platform === experiment.platform) ?? null;
+      const destination = accounts.find((account: { platform: string }) => account.platform === experiment.platform) ?? null;
       const variant = persistedVariants[index];
       return { ...experiment, variantId: variant.id, destination, availability: !connectedPlatforms.has(experiment.platform) ? 'account_connection_required' : variant.status === 'ready' ? 'ready_for_creator_approval' : 'variant_rendering_required' };
     });
@@ -521,9 +525,9 @@ export function createGrowthRoutes() {
     const readiness = assessCreatorWorkflowReadiness({
       sourceStatus: video.status,
       connectedDestinations,
-      preparedVariants: variants.filter((variant) => variant.status === 'ready').length,
-      failedVariants: variants.filter((variant) => variant.status === 'failed').length,
-      scheduledPosts: variants.flatMap((variant) => variant.scheduledPosts),
+      preparedVariants: variants.filter((variant: { status: string }) => variant.status === 'ready').length,
+      failedVariants: variants.filter((variant: { status: string }) => variant.status === 'failed').length,
+      scheduledPosts: variants.flatMap((variant: { scheduledPosts: ReadinessScheduledPost[] }) => variant.scheduledPosts),
     });
 
     return c.json({ data: { sourceVideoId: video.id, ...readiness } });
@@ -563,7 +567,7 @@ export function createGrowthRoutes() {
       },
     });
 
-    const variantIds = variants.map((variant) => variant.id);
+    const variantIds = variants.map((variant: { id: string }) => variant.id);
     const baselineMetrics = await prisma.postMetric.findMany({
       where: {
         workspaceId: video.workspaceId,
@@ -582,7 +586,7 @@ export function createGrowthRoutes() {
       take: 100,
     });
 
-    const experimentMetrics = variants.flatMap((variant) => variant.metrics);
+    const experimentMetrics: LearningRouteMetric[] = variants.flatMap((variant: { metrics: LearningRouteMetric[] }) => variant.metrics);
     const learning = evaluateLearningSignal({
       objective: query.objective as GrowthObjective,
       experiment: experimentMetrics,
@@ -613,7 +617,7 @@ export function createGrowthRoutes() {
         metrics: { select: { scheduledPostId: true, variantId: true, platform: true, recordedAt: true, importedAt: true, provenance: true, views: true, likes: true, comments: true, shares: true, saves: true, followerGain: true, completionRate: true } },
       },
     });
-    const variantIds = variants.map((variant) => variant.id);
+    const variantIds = variants.map((variant: { id: string }) => variant.id);
     const baseline = await prisma.postMetric.findMany({
       where: { workspaceId: video.workspaceId, ...(variantIds.length ? { variantId: { notIn: variantIds } } : {}) },
       select: { scheduledPostId: true, variantId: true, platform: true, recordedAt: true, views: true, likes: true, comments: true, shares: true, saves: true, followerGain: true, completionRate: true },
@@ -621,7 +625,7 @@ export function createGrowthRoutes() {
       take: 100,
     });
     const latestMetricByPost = new Map<string, { scheduledPostId: string; platform: string; recordedAt: Date; importedAt: Date | null; provenance: unknown }>();
-    for (const metric of variants.flatMap((variant) => variant.metrics)) {
+    for (const metric of variants.flatMap((variant: { metrics: ScorecardRouteMetric[] }) => variant.metrics)) {
       const current = latestMetricByPost.get(metric.scheduledPostId);
       if (!current || metric.recordedAt > current.recordedAt) latestMetricByPost.set(metric.scheduledPostId, metric);
     }

@@ -89,7 +89,7 @@ export function createPublishingRoutes() {
       return c.json({ data: existing, idempotent: true, message: 'The creator intent already exists for this idempotency key.' }, 200);
     }
 
-    const post = await prisma.$transaction(async (tx) => {
+    const post = await prisma.$transaction(async (tx: any) => {
       const created = await tx.scheduledPost.create({
         data: {
           workspaceId: video.workspaceId,
@@ -150,7 +150,7 @@ export function createPublishingRoutes() {
     }
 
     const approvedAt = new Date();
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const approved = await tx.scheduledPost.update({
         where: { id: post.id },
         data: { status: 'scheduled', creatorApprovedAt: approvedAt, creatorApprovedBy: actor.id, nextAttemptAt: post.scheduledAt },

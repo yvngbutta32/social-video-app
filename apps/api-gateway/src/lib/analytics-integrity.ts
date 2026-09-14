@@ -1,5 +1,11 @@
 import type { Prisma } from '@prisma/client';
 
+type MetricScheduledPost = {
+  variant?: { video?: { id: string; title: string | null }; thumbnailObjectKey?: string | null; variantType?: string | null; videoId?: string | null } | null;
+  variantId?: string;
+  abTest?: { id: string; name: string; status: string; hypothesis: string | null; startedAt: Date; completedAt: Date | null } | null;
+  socialAccount?: { id: string; platform: string; username: string | null; displayName: string | null; followerCount: number; isActive: boolean } | null;
+};
 export type AnalyticsFilters = {
   platform?: 'tiktok' | 'instagram' | 'youtube' | 'facebook' | 'x' | 'linkedin';
   campaignId?: string;
@@ -11,6 +17,8 @@ export type MetricSnapshot = {
   id: string;
   scheduledPostId: string;
   platform: string;
+  scheduledPost?: MetricScheduledPost;
+  metadata?: unknown;
   recordedAt: Date;
   importedAt?: Date | null;
   views?: bigint | number | null;

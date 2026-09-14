@@ -125,7 +125,7 @@ export function createInternalConnectorRoutes() {
     if (!scheduledPost) throw new HTTPException(404, { message: 'No active creator-owned scheduled post matches this official platform observation.' });
 
     const importedAt = new Date();
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const metric = await tx.postMetric.upsert({
         where: { scheduledPostId_ingestionKey: { scheduledPostId: scheduledPost.id, ingestionKey: snapshot.ingestionKey } },
         create: {
