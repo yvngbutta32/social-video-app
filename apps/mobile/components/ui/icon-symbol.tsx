@@ -1,11 +1,9 @@
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { SymbolWeight, SymbolViewProps } from "expo-symbols";
-import { ComponentProps } from "react";
+import { SymbolWeight } from "expo-symbols";
 import { OpaqueColorValue, type StyleProp, type TextStyle } from "react-native";
 
-type IconMapping = Record<SymbolViewProps["name"], ComponentProps<typeof MaterialIcons>["name"]>;
 type IconSymbolName = keyof typeof MAPPING;
 
 /**
@@ -21,15 +19,29 @@ const MAPPING = {
   "plus.circle.fill": "add-circle",
   "sparkles": "auto-awesome",
   "wand.and.stars": "auto-fix-high",
+  "photo.on.rectangle.angled": "photo-library",
+  "arrow.triangle.branch": "alt-route",
+  "film.stack": "movie",
+  "checkmark.seal.fill": "verified",
+  "checkmark.circle": "check-circle",
+  "xmark.circle": "cancel",
+  "doc.text.magnifyingglass": "find-in-page",
+  "scissors": "content-cut",
+  "waveform": "graphic-eq",
+  "person.2.fill": "groups",
   "clock.arrow.circlepath": "history",
   "arrow.triangle.2.circlepath": "refresh",
   "lock.shield.fill": "verified-user",
+  "gearshape.fill": "settings",
   "slider.horizontal.3": "tune",
   "play.circle.fill": "play-circle-filled",
   "paperplane.fill": "send",
+  "play.fill": "play-arrow",
+  "chevron.left": "chevron-left",
+  "arrow.up.right.square": "open-in-new",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
-} as IconMapping;
+} as const;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
