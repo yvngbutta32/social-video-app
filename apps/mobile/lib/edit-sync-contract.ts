@@ -4,6 +4,7 @@ import type { ServerAdaptationRecipe } from "@/lib/adaptation-contract";
 export function localRecipeToManualEdit(recipe: MobileEditRecipe) {
   return {
     sourceRange: { startSeconds: recipe.trimStartSeconds, endSeconds: recipe.trimEndSeconds },
+    ...(recipe.selectedClipCandidateId ? { clipCandidateId: recipe.selectedClipCandidateId } : {}),
     composition: {
       mode: recipe.composition === "blur_background" ? "blur_bg" : recipe.composition,
       focalPoint: { x: recipe.focalX, y: recipe.focalY },

@@ -31,6 +31,7 @@ export type MobileSource = Omit<LocalCreatorMedia, "uri" | "origin"> & {
 
 export type MobileEditRecipe = {
   sourceId: string;
+  selectedClipCandidateId?: string;
   trimStartSeconds: number;
   trimEndSeconds: number;
   composition: "smart_crop" | "fit" | "blur_background";
@@ -64,6 +65,7 @@ const CreatorWorkflowContext = createContext<CreatorWorkflowContextValue | null>
 
 export const createDefaultRecipe = (sourceId: string): MobileEditRecipe => ({
   sourceId,
+  selectedClipCandidateId: undefined,
   trimStartSeconds: 0,
   trimEndSeconds: 30,
   composition: "smart_crop",
