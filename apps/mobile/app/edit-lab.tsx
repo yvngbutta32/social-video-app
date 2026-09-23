@@ -12,11 +12,12 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { type AdaptationDetail, type PrivateArtifactPreview } from "@/lib/adaptation-contract";
 import { useCreatorWorkflow, type MobileEditRecipe } from "@/lib/creator-workflow";
+import type { ClipCandidate, ClipSet } from "@/lib/clipping-contract";
 import { localRecipeToManualEdit, serverRecipeToLocalRecipe } from "@/lib/edit-sync-contract";
 import { adaptationRenderLifecycle } from "@/lib/render-lifecycle";
 import { formatTimelineTime, normalizeTrimRange, nudgeTrimRange, trimDurationSeconds } from "@/lib/precision-timeline";
 import { auditTimedCaptionTrack, formatCaptionTimestamp, normalizeTimedCaptionTrack, updateTimedCaptionCue } from "@/lib/timed-caption-contract";
-import { getAdaptationDetail, getPrivateArtifactPreview, saveAdaptationEdit } from "@/lib/viralboost-api";
+import { getAdaptationDetail, getClipCandidates, getPrivateArtifactPreview, saveAdaptationEdit } from "@/lib/viralboost-api";
 
 const compositionOptions: { value: MobileEditRecipe["composition"]; title: string; note: string }[] = [
   { value: "smart_crop", title: "Smart crop", note: "Focus the subject" },
@@ -34,7 +35,7 @@ export default function EditLabScreen() {
   const colors = useColors();
   const { variantId } = useLocalSearchParams<{ variantId?: string }>();
   const serverVariantId = typeof variantId === "string" && variantId ? variantId : null;
-  const { selectedSourceId, sources, recipeFor, saveRecipe, replaceRecipe } = useCreatorWorkflow();
+  const { selectedSourceId, sources, recipeFor, saveRecipe, replaceRecipe, platformsFor } = useCreatorWorkflow();
   const source = useMemo(() => sources.find((item) => item.id === selectedSourceId) ?? null, [selectedSourceId, sources]);
   const initial = recipeFor(source?.id ?? "unselected");
   const [recipe, setRecipe] = useState(initial);
@@ -48,6 +49,9 @@ export default function EditLabScreen() {
   const [privatePreview, setPrivatePreview] = useState<PrivateArtifactPreview | null>(null);
   const [requestingPreview, setRequestingPreview] = useState(false);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
+  const [clipSet, setClipSet] = useState<ClipSet | null>(null);
+  const [clipLoading, setClipLoading] = useState(false);
+  const [clipNotice, setClipNotice] = useState<string | null>(null);
   const player = useVideoPlayer(privatePreview?.url ?? null, (instance) => { instance.loop = false; });
   const { status: playerStatus } = useEvent(player, "statusChange", { status: player.status });
 
@@ -63,6 +67,30 @@ export default function EditLabScreen() {
   }, [serverVariantId]);
 
   useEffect(() => { void refreshLifecycle(); }, [refreshLifecycle]);
+
+  const clipPlatform = source ? platformsFor(source.id)[0] ?? "tiktok" : "tiktok";
+  useEffect(() => {
+    let active = true;
+    const serverVideoId = source?.serverVideoId;
+    if (!serverVideoId) {
+      setClipSet(null);
+      setClipNotice(null);
+      return () => { active = false; };
+    }
+    setClipLoading(true);
+    setClipNotice(null);
+    void getClipCandidates(serverVideoId, clipPlatform).then((nextClipSet) => {
+      if (active) setClipSet(nextClipSet);
+    }).catch(() => {
+      if (active) {
+        setClipSet(null);
+        setClipNotice("Server clip analysis is not available yet. Manual trimming remains ready below.");
+      }
+    }).finally(() => {
+      if (active) setClipLoading(false);
+    });
+    return () => { active = false; };
+  }, [clipPlatform, source?.serverVideoId]);
 
   if (!source) {
     return <ScreenContainer className="p-6"><Text style={[styles.empty, { color: colors.foreground }]}>Choose a source from Library before opening Edit Lab.</Text><Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, { borderColor: colors.border, backgroundColor: colors.surface }, pressed && styles.pressed]}><Text style={{ color: colors.foreground, fontWeight: "800" }}>Back to Library</Text></Pressable></ScreenContainer>;
@@ -124,7 +152,7 @@ export default function EditLabScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}><Pressable onPress={() => router.back()} style={({ pressed }) => [styles.iconButton, { backgroundColor: colors.surface, borderColor: colors.border }, pressed && styles.pressed]}><IconSymbol name="chevron.left" size={22} color={colors.foreground} /></Pressable><View style={styles.headerCopy}><Eyebrow>Advanced edit lab</Eyebrow><Text numberOfLines={1} style={[styles.sourceName, { color: colors.foreground }]}>{source.name}</Text></View></View>
         <CreatorCard><StatusPill tone={serverVariantId ? "accent" : "muted"}>{serverVariantId ? "SERVER RECIPE" : "LOCAL RECIPE"} · REVISION {recipe.revision}</StatusPill><Text style={[styles.cardTitle, { color: colors.foreground }]}>Shape the draft before it renders.</Text><Text style={[styles.copy, { color: colors.muted }]}>{serverVariantId ? "These changes stay separate from your original. Saving requests a new private render; it does not publish anything." : "These changes stay separate from your original. A server adaptation is required before a private render can be queued."}</Text></CreatorCard>
-        <ClipCandidateReviewCard clipSet={null} />
+        <ClipCandidateReviewCard clipSet={clipSet} loading={clipLoading} notice={clipNotice} platform={clipPlatform} onAccept={(candidate: ClipCandidate) => { updateTrim(candidate.range); setSyncNotice("Clip range accepted locally. Save the revision when you are ready to request a private render."); }} onEdit={(candidate: ClipCandidate) => updateTrim(candidate.range)} onReject={(candidate: ClipCandidate) => setClipSet((current) => current ? { ...current, candidates: current.candidates.map((item) => item.id === candidate.id ? { ...item, status: "rejected" } : item) } : current)} />
         {serverVariantId ? <CreatorCard style={styles.lifecycleCard}><View style={styles.lifecycleTop}><View><Eyebrow>Private render lifecycle</Eyebrow><Text style={[styles.lifecycleTitle, { color: colors.foreground }]}>{lifecycle.label}</Text></View><StatusPill tone={lifecycle.tone}>{adaptation?.status?.toUpperCase() ?? "CHECKING"}</StatusPill></View><Text style={[styles.copy, { color: colors.muted }]}>{lifecycle.detail}</Text>{lifecycleNotice ? <Text style={[styles.lifecycleNotice, { color: colors.warning }]}>{lifecycleNotice}</Text> : null}<View style={styles.lifecycleActions}><Pressable onPress={() => void refreshLifecycle()} disabled={loadingLifecycle} style={({ pressed }) => [styles.lifecycleButton, { borderColor: colors.border }, (pressed || loadingLifecycle) && styles.pressed]}>{loadingLifecycle ? <ActivityIndicator color={colors.primary} /> : <><IconSymbol name="arrow.triangle.2.circlepath" size={18} color={colors.primary} /><Text style={[styles.lifecycleButtonText, { color: colors.foreground }]}>Refresh status</Text></>}</Pressable>{lifecycle.canPreview ? <Pressable onPress={() => router.push({ pathname: "/artifact-preview", params: { variantId: serverVariantId } } as never)} style={({ pressed }) => [styles.lifecycleButton, { borderColor: colors.border }, pressed && styles.pressed]}><IconSymbol name="play.fill" size={16} color={colors.primary} /><Text style={[styles.lifecycleButtonText, { color: colors.foreground }]}>Review artifact</Text></Pressable> : null}</View></CreatorCard> : null}
         {serverVariantId && lifecycle.canPreview ? <CreatorCard style={styles.previewCard}><View style={styles.previewHeading}><View><Eyebrow>Private inspection</Eyebrow><Text style={[styles.previewTitle, { color: colors.foreground }]}>Inspect this cut before you decide.</Text></View><StatusPill tone="ready">REVIEW READY</StatusPill></View><Text style={[styles.copy, { color: colors.muted }]}>Load the latest signed render here to check pacing and framing. This review stays private, expires automatically, and does not publish or share your draft.</Text>{privatePreview ? <><VideoView style={styles.previewVideo} player={player} nativeControls contentFit="contain" surfaceType="textureView" /><Text style={[styles.previewMeta, { color: colors.muted }]}>{playerStatus === "loading" ? "Loading the authorized preview…" : `Private preview expires at ${new Date(privatePreview.expiresAt).toLocaleTimeString()}.`}</Text></> : null}{previewNotice ? <Text style={[styles.previewNotice, { color: colors.warning }]}>{previewNotice}</Text> : null}<View style={styles.previewActions}><Pressable accessibilityRole="button" accessibilityLabel={privatePreview ? "Refresh private in-editor preview" : "Load private in-editor preview"} accessibilityHint="Uses a short-lived workspace-authorized URL and does not publish this draft." onPress={() => void loadPrivatePreview()} disabled={requestingPreview} style={({ pressed }) => [styles.previewPrimary, { backgroundColor: colors.primary }, (pressed || requestingPreview) && styles.pressed]}>{requestingPreview ? <ActivityIndicator color={colors.background} /> : <><IconSymbol name="play.fill" size={17} color={colors.background} /><Text style={[styles.previewPrimaryText, { color: colors.background }]}>{privatePreview ? "Refresh preview" : "Load preview"}</Text></>}</Pressable><Pressable accessibilityRole="button" accessibilityLabel="Open full private artifact review" accessibilityHint="Opens the same workspace-authorized artifact in a dedicated review screen; it does not publish." onPress={() => router.push({ pathname: "/artifact-preview", params: { variantId: serverVariantId } } as never)} style={({ pressed }) => [styles.previewSecondary, { borderColor: colors.border }, pressed && styles.pressed]}><IconSymbol name="arrow.up.right.square" size={17} color={colors.primary} /><Text style={[styles.previewSecondaryText, { color: colors.foreground }]}>Full review</Text></Pressable></View></CreatorCard> : null}
         <CreatorCard style={styles.controls}>

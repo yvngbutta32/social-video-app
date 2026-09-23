@@ -10,6 +10,7 @@ import { parsePlatformActionReadiness, type PlatformTargetConnectionState } from
 import { normalizeAdaptationBrief } from "@/lib/adaptation-brief";
 import type { CreatorTargetPlatform } from "@/lib/creator-workflow";
 import { clearSecureSession, getSecureSession, saveSecureSession } from "@/lib/secure-session";
+import { parseRemoteClipCandidates } from "@/lib/remote-clip-candidates";
 
 function apiBaseUrl() {
   const configured = Constants.expoConfig?.extra?.viralBoostApiUrl;
@@ -118,6 +119,12 @@ export async function getWorkspaceSources() {
   const response = await viralBoostRequest("/api/v1/videos?limit=50&sortBy=updatedAt&sortOrder=desc");
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseWorkspaceSources(await response.json());
+}
+
+export async function getClipCandidates(videoId: string, platform: CreatorTargetPlatform = "tiktok") {
+  const response = await viralBoostRequest(`/api/v1/growth/clip-candidates/${encodeURIComponent(videoId)}?platform=${encodeURIComponent(platform)}`);
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseRemoteClipCandidates(await response.json());
 }
 
 export async function getWorkspaceActivity() {

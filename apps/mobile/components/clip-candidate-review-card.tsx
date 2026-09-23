@@ -7,6 +7,9 @@ import { candidateEvidenceSummary, type ClipCandidate, type ClipSet } from "@/li
 
 export type ClipCandidateReviewCardProps = {
   clipSet: ClipSet | null;
+  loading?: boolean;
+  notice?: string | null;
+  platform?: string;
   onAccept?: (candidate: ClipCandidate) => void;
   onReject?: (candidate: ClipCandidate) => void;
   onEdit?: (candidate: ClipCandidate) => void;
@@ -17,7 +20,7 @@ function durationLabel(candidate: ClipCandidate) {
   return `${duration.toFixed(1)}s`; 
 }
 
-export function ClipCandidateReviewCard({ clipSet, onAccept, onReject, onEdit }: ClipCandidateReviewCardProps) {
+export function ClipCandidateReviewCard({ clipSet, loading = false, notice = null, platform = "selected platform", onAccept, onReject, onEdit }: ClipCandidateReviewCardProps) {
   const colors = useColors();
 
   if (!clipSet) {
@@ -26,14 +29,14 @@ export function ClipCandidateReviewCard({ clipSet, onAccept, onReject, onEdit }:
         <View style={styles.headingRow}>
           <View style={styles.headingCopy}>
             <Eyebrow>Clip discovery</Eyebrow>
-            <Text style={[styles.title, { color: colors.foreground }]}>Waiting for a transcript</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>{loading ? "Analyzing source" : "Clip discovery is not ready"}</Text>
           </View>
-          <StatusPill tone="muted">UNAVAILABLE</StatusPill>
+          <StatusPill tone={loading ? "accent" : "muted"}>{loading ? "CHECKING" : "UNAVAILABLE"}</StatusPill>
         </View>
-        <Text style={[styles.copy, { color: colors.muted }]}>ViralBoost will show explainable clip candidates here once this source has real word-level transcript cues. It will not invent highlights or imply that a selection guarantees reach.</Text>
+        <Text style={[styles.copy, { color: colors.muted }]}>{loading ? `Checking the private workspace for ${platform} scene and caption evidence.` : "ViralBoost will show explainable clip candidates here once this source has real processor analysis or word-level transcript cues. It will not invent highlights or imply that a selection guarantees reach."}</Text>
         <View style={[styles.boundary, { borderColor: colors.border, backgroundColor: `${colors.warning}10` }]}>
           <IconSymbol name="doc.text.magnifyingglass" size={18} color={colors.warning} />
-          <Text style={[styles.boundaryText, { color: colors.foreground }]}>Manual trimming remains available below. Connect transcript processing to unlock candidate review.</Text>
+          <Text style={[styles.boundaryText, { color: colors.foreground }]}>{notice ?? "Manual trimming remains available below. Candidate review appears only when analysis is returned with provenance."}</Text>
         </View>
       </CreatorCard>
     );
@@ -48,7 +51,7 @@ export function ClipCandidateReviewCard({ clipSet, onAccept, onReject, onEdit }:
         </View>
         <StatusPill tone="accent">{clipSet.candidates.length} CANDIDATES</StatusPill>
       </View>
-      <Text style={[styles.copy, { color: colors.muted }]}>Candidates are ranked review suggestions from transcript boundaries and recorded evidence. Accept, reject, or edit each one before any render request.</Text>
+      <Text style={[styles.copy, { color: colors.muted }]}>Candidates are ranked review suggestions from {platform} processor boundaries and recorded evidence. Accept, reject, or edit each one before any render request.</Text>
       {clipSet.candidates.map((candidate, index) => (
         <View key={candidate.id} style={[styles.candidate, { borderColor: colors.border }]}>
           <View style={styles.candidateTop}>
