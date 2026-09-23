@@ -25,6 +25,8 @@ describe("Edit Lab precision timeline contract", () => {
   it("surfaces clip review only from real ClipSets and explains the transcript boundary", () => {
     expect(editLab).toContain("<ClipCandidateReviewCard clipSet={clipSet}");
     expect(editLab).toContain("getClipCandidates");
+    expect(editLab).toContain("onPlatformChange={setClipPlatform}");
+    expect(clipCandidateReviewCard).toContain("Clip candidate platform selector");
     expect(clipCandidateReviewCard).toContain("Clip discovery is not ready");
     expect(clipCandidateReviewCard).toContain("will not invent highlights");
     expect(clipCandidateReviewCard).toContain("candidateEvidenceSummary");

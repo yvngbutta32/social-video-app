@@ -4,12 +4,16 @@ import { CreatorCard, Eyebrow, StatusPill } from "@/components/creator-ui";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { candidateEvidenceSummary, type ClipCandidate, type ClipSet } from "@/lib/clipping-contract";
+import type { CreatorTargetPlatform } from "@/lib/creator-workflow";
 
 export type ClipCandidateReviewCardProps = {
   clipSet: ClipSet | null;
   loading?: boolean;
   notice?: string | null;
-  platform?: string;
+  platform?: CreatorTargetPlatform;
+  platforms?: readonly CreatorTargetPlatform[];
+  selectedPlatform?: CreatorTargetPlatform;
+  onPlatformChange?: (platform: CreatorTargetPlatform) => void;
   onAccept?: (candidate: ClipCandidate) => void;
   onReject?: (candidate: ClipCandidate) => void;
   onEdit?: (candidate: ClipCandidate) => void;
@@ -20,7 +24,7 @@ function durationLabel(candidate: ClipCandidate) {
   return `${duration.toFixed(1)}s`; 
 }
 
-export function ClipCandidateReviewCard({ clipSet, loading = false, notice = null, platform = "selected platform", onAccept, onReject, onEdit }: ClipCandidateReviewCardProps) {
+export function ClipCandidateReviewCard({ clipSet, loading = false, notice = null, platform = "tiktok", platforms = [], selectedPlatform = platform, onPlatformChange, onAccept, onReject, onEdit }: ClipCandidateReviewCardProps) {
   const colors = useColors();
 
   if (!clipSet) {
@@ -34,6 +38,7 @@ export function ClipCandidateReviewCard({ clipSet, loading = false, notice = nul
           <StatusPill tone={loading ? "accent" : "muted"}>{loading ? "CHECKING" : "UNAVAILABLE"}</StatusPill>
         </View>
         <Text style={[styles.copy, { color: colors.muted }]}>{loading ? `Checking the private workspace for ${platform} scene and caption evidence.` : "ViralBoost will show explainable clip candidates here once this source has real processor analysis or word-level transcript cues. It will not invent highlights or imply that a selection guarantees reach."}</Text>
+        {platforms.length ? <PlatformSelector platforms={platforms} selectedPlatform={selectedPlatform} onPlatformChange={onPlatformChange} /> : null}
         <View style={[styles.boundary, { borderColor: colors.border, backgroundColor: `${colors.warning}10` }]}>
           <IconSymbol name="doc.text.magnifyingglass" size={18} color={colors.warning} />
           <Text style={[styles.boundaryText, { color: colors.foreground }]}>{notice ?? "Manual trimming remains available below. Candidate review appears only when analysis is returned with provenance."}</Text>
@@ -52,6 +57,7 @@ export function ClipCandidateReviewCard({ clipSet, loading = false, notice = nul
         <StatusPill tone="accent">{clipSet.candidates.length} CANDIDATES</StatusPill>
       </View>
       <Text style={[styles.copy, { color: colors.muted }]}>Candidates are ranked review suggestions from {platform} processor boundaries and recorded evidence. Accept, reject, or edit each one before any render request.</Text>
+      {platforms.length ? <PlatformSelector platforms={platforms} selectedPlatform={selectedPlatform} onPlatformChange={onPlatformChange} /> : null}
       {clipSet.candidates.map((candidate, index) => (
         <View key={candidate.id} style={[styles.candidate, { borderColor: colors.border }]}>
           <View style={styles.candidateTop}>
@@ -76,6 +82,11 @@ export function ClipCandidateReviewCard({ clipSet, loading = false, notice = nul
   );
 }
 
+function PlatformSelector({ platforms, selectedPlatform, onPlatformChange }: { platforms: readonly CreatorTargetPlatform[]; selectedPlatform: CreatorTargetPlatform; onPlatformChange?: (platform: CreatorTargetPlatform) => void }) {
+  const colors = useColors();
+  return <View style={styles.platformRow} accessibilityLabel="Clip candidate platform selector">{platforms.map((item) => <Pressable key={item} accessibilityRole="button" accessibilityState={{ selected: item === selectedPlatform }} onPress={() => onPlatformChange?.(item)} style={({ pressed }) => [styles.platformChip, { borderColor: item === selectedPlatform ? colors.primary : colors.border, backgroundColor: item === selectedPlatform ? `${colors.primary}18` : colors.surface }, pressed && styles.pressed]}><Text style={[styles.platformText, { color: item === selectedPlatform ? colors.primary : colors.muted }]}>{item}</Text></Pressable>)}</View>;
+}
+
 const styles = StyleSheet.create({
   card: { gap: 14 },
   headingRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 },
@@ -95,6 +106,9 @@ const styles = StyleSheet.create({
   evidence: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
   warning: { fontSize: 11, lineHeight: 16, fontWeight: "700" },
   actions: { flexDirection: "row", gap: 8 },
+  platformRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  platformChip: { minHeight: 32, paddingHorizontal: 11, borderWidth: 1, borderRadius: 999, justifyContent: "center" },
+  platformText: { fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
   action: { flex: 1, minHeight: 36, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 5, borderWidth: 1, borderRadius: 10 },
   actionText: { fontSize: 11, fontWeight: "900" },
   pressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
