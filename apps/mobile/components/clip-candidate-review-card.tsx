@@ -13,6 +13,7 @@ export type ClipCandidateReviewCardProps = {
   platform?: CreatorTargetPlatform;
   platforms?: readonly CreatorTargetPlatform[];
   selectedPlatform?: CreatorTargetPlatform;
+  selectedCandidateId?: string;
   onPlatformChange?: (platform: CreatorTargetPlatform) => void;
   onAccept?: (candidate: ClipCandidate) => void;
   onReject?: (candidate: ClipCandidate) => void;
@@ -24,7 +25,7 @@ function durationLabel(candidate: ClipCandidate) {
   return `${duration.toFixed(1)}s`; 
 }
 
-export function ClipCandidateReviewCard({ clipSet, loading = false, notice = null, platform = "tiktok", platforms = [], selectedPlatform = platform, onPlatformChange, onAccept, onReject, onEdit }: ClipCandidateReviewCardProps) {
+export function ClipCandidateReviewCard({ clipSet, loading = false, notice = null, platform = "tiktok", platforms = [], selectedPlatform = platform, selectedCandidateId, onPlatformChange, onAccept, onReject, onEdit }: ClipCandidateReviewCardProps) {
   const colors = useColors();
 
   if (!clipSet) {
@@ -59,14 +60,14 @@ export function ClipCandidateReviewCard({ clipSet, loading = false, notice = nul
       <Text style={[styles.copy, { color: colors.muted }]}>Candidates are ranked review suggestions from {platform} processor boundaries and recorded evidence. Accept, reject, or edit each one before any render request.</Text>
       {platforms.length ? <PlatformSelector platforms={platforms} selectedPlatform={selectedPlatform} onPlatformChange={onPlatformChange} /> : null}
       {clipSet.candidates.map((candidate, index) => (
-        <View key={candidate.id} style={[styles.candidate, { borderColor: colors.border }]}>
+        <View key={candidate.id} style={[styles.candidate, { borderColor: candidate.id === selectedCandidateId ? colors.primary : colors.border, backgroundColor: candidate.id === selectedCandidateId ? `${colors.primary}0D` : "transparent" }]}>
           <View style={styles.candidateTop}>
             <View style={styles.rank}><Text style={[styles.rankText, { color: colors.primary }]}>0{index + 1}</Text></View>
             <View style={styles.candidateCopy}>
               <Text numberOfLines={2} style={[styles.candidateTitle, { color: colors.foreground }]}>{candidate.title}</Text>
               <Text style={[styles.meta, { color: colors.muted }]}>{durationLabel(candidate)} · {Math.round(candidate.confidence * 100)}% confidence · score {candidate.score}</Text>
             </View>
-            <StatusPill tone={candidate.status === "accepted" ? "ready" : candidate.status === "rejected" ? "muted" : "attention"}>{candidate.status.toUpperCase()}</StatusPill>
+            <View style={styles.statusStack}><StatusPill tone={candidate.id === selectedCandidateId ? "ready" : candidate.status === "accepted" ? "ready" : candidate.status === "rejected" ? "muted" : "attention"}>{candidate.id === selectedCandidateId ? "SELECTED" : candidate.status.toUpperCase()}</StatusPill>{candidate.id === selectedCandidateId ? <Text style={[styles.selectedMeta, { color: colors.primary }]}>For private render</Text> : null}</View>
           </View>
           <Text numberOfLines={3} style={[styles.summary, { color: colors.muted }]}>{candidate.summary}</Text>
           <Text style={[styles.evidence, { color: colors.primary }]}>{candidateEvidenceSummary(candidate)}</Text>
@@ -100,6 +101,8 @@ const styles = StyleSheet.create({
   rank: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF0D" },
   rankText: { fontSize: 12, fontWeight: "900" },
   candidateCopy: { flex: 1, gap: 4 },
+  statusStack: { alignItems: "flex-end", gap: 4 },
+  selectedMeta: { fontSize: 9, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.5 },
   candidateTitle: { fontSize: 14, lineHeight: 19, fontWeight: "900" },
   meta: { fontSize: 11, lineHeight: 16, fontWeight: "700" },
   summary: { fontSize: 12, lineHeight: 18 },
