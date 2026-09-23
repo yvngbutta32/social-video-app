@@ -27,6 +27,9 @@ describe("Edit Lab precision timeline contract", () => {
     expect(editLab).toContain("getClipCandidates");
     expect(editLab).toContain("onPlatformChange={setClipPlatform}");
     expect(editLab).toContain("selectedCandidateId={recipe.selectedClipCandidateId}");
+    expect(editLab).toContain("Review & queue private render");
+    expect(editLab).toContain("Queue this revision for private rendering?");
+    expect(editLab).toContain("The result stays in the workspace and is not published.");
     expect(clipCandidateReviewCard).toContain("Clip candidate platform selector");
     expect(clipCandidateReviewCard).toContain("For private render");
     expect(clipCandidateReviewCard).toContain("Clip discovery is not ready");
