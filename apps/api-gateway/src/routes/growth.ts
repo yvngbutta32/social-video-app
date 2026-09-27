@@ -251,7 +251,7 @@ export function createGrowthRoutes() {
       sourceVideoId: video.id,
       durationSeconds: video.durationSeconds,
     });
-    const { scenes, captions } = extractClipAnalysis(video.variants);
+    const { scenes, captions, transcript } = extractClipAnalysis(video.variants);
     const candidates = createClipCandidates({
       durationSeconds: video.durationSeconds,
       preferredDurationSeconds: automaticRecipe.sourceRange.endSeconds - automaticRecipe.sourceRange.startSeconds,
@@ -264,10 +264,22 @@ export function createGrowthRoutes() {
         videoId: video.id,
         platform,
         candidates,
+        transcript: transcript ?? {
+          state: 'unavailable',
+          transcriptId: null,
+          provider: null,
+          modelVersion: null,
+          language: null,
+          wordCount: 0,
+        },
         evidence: {
           sceneCount: scenes.length,
           captionCueCount: captions.length,
-          analysisState: scenes.length > 0 ? 'scene_detection_available' : 'opening_fallback_only',
+          analysisState: transcript?.state === 'word_level'
+            ? 'word_level_transcript_available'
+            : scenes.length > 0
+              ? 'scene_detection_available'
+              : 'opening_fallback_only',
         },
         safeguards: [
           'Candidates are editable clip drafts based on available processor scene boundaries.',

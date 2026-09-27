@@ -17,6 +17,16 @@ const captions = [
   { start: 16, end: 19, text: 'Second cue' },
   { start: 38, end: 45, text: 'Third cue' },
 ];
+const transcript = {
+  transcriptId: 'tx-1',
+  provider: 'whisper',
+  modelVersion: 'v2',
+  language: 'en',
+  words: [
+    { id: 'w-1', startMs: 0, endMs: 400, text: 'Opening', confidence: 0.98 },
+    { id: 'w-2', startMs: 450, endMs: 900, text: 'proof.', confidence: 0.97 },
+  ],
+};
 
 const candidates = createClipCandidates({
   durationSeconds: 60,
@@ -42,9 +52,12 @@ assert.equal(fallback[0]?.source, 'opening_fallback');
 assert.equal(fallback[0]?.startSeconds, 0);
 assert.equal(fallback[0]?.endSeconds, 45);
 
-const extracted = extractClipAnalysis([{ generationParams: { scenes, captions } }]);
+const extracted = extractClipAnalysis([{ generationParams: { scenes, captions, transcript } }]);
 assert.equal(extracted.scenes.length, 3);
 assert.equal(extracted.captions.length, 3);
+assert.equal(extracted.transcript?.state, 'word_level');
+assert.equal(extracted.transcript?.transcriptId, 'tx-1');
+assert.equal(extracted.transcript?.wordCount, 2);
 
 const automaticRecipe = createAutomaticAdaptationRecipe({
   platform: 'tiktok',

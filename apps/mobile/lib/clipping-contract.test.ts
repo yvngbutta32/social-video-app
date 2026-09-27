@@ -40,6 +40,8 @@ describe("clipping contract", () => {
       sourceId: "source-1",
       revision: 0,
       transcriptVersion: "  transcript-v1 ",
+      transcriptState: "unavailable" as const,
+      transcriptProvenance: null,
       generatedBy: "unknown" as "deterministic-boundaries",
       candidates: [
         normalizeClipCandidate({ id: "low", sourceId: "source-1", range: { trimStartSeconds: 2, trimEndSeconds: 8 }, title: "Low", summary: "Low", signals: { cleanStart: 1 } }, 60),

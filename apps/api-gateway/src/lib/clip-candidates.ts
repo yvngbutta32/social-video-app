@@ -13,6 +13,33 @@ const captionSchema = z.object({
   text: z.string().min(1).optional(),
 }).refine((caption) => caption.end > caption.start);
 
+const transcriptWordSchema = z.object({
+  id: z.string().min(1).optional(),
+  startMs: z.number().finite().min(0),
+  endMs: z.number().finite().positive(),
+  text: z.string().min(1),
+  speaker: z.string().min(1).nullable().optional(),
+  confidence: z.number().finite().min(0).max(1).nullable().optional(),
+}).refine((word) => word.endMs > word.startMs);
+
+const transcriptSchema = z.object({
+  transcriptId: z.string().min(1).nullable().optional(),
+  provider: z.string().min(1).nullable().optional(),
+  modelVersion: z.string().min(1).nullable().optional(),
+  language: z.string().min(1).nullable().optional(),
+  text: z.string().min(1).optional(),
+  words: z.array(transcriptWordSchema).optional(),
+});
+
+export type ClipTranscriptProvenance = {
+  state: 'unavailable' | 'text_only' | 'word_level';
+  transcriptId: string | null;
+  provider: string | null;
+  modelVersion: string | null;
+  language: string | null;
+  wordCount: number;
+};
+
 export type ClipCandidate = {
   id: string;
   startSeconds: number;
@@ -44,6 +71,23 @@ function parseCaptions(value: unknown) {
     .map((caption) => captionSchema.safeParse(caption))
     .filter((parsed): parsed is { success: true; data: z.infer<typeof captionSchema> } => parsed.success)
     .map((parsed) => parsed.data);
+}
+
+function parseTranscript(value: unknown): ClipTranscriptProvenance | null {
+  const parsed = transcriptSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const transcript = parsed.data;
+  const wordCount = transcript.words?.length ?? 0;
+  const state = wordCount > 0 ? 'word_level' : transcript.text?.trim() ? 'text_only' : 'unavailable';
+  if (state === 'unavailable') return null;
+  return {
+    state,
+    transcriptId: transcript.transcriptId ?? null,
+    provider: transcript.provider ?? null,
+    modelVersion: transcript.modelVersion ?? null,
+    language: transcript.language ?? null,
+    wordCount,
+  };
 }
 
 function uniqueAnchors(scenes: z.infer<typeof sceneSchema>[], durationSeconds: number) {
@@ -131,9 +175,10 @@ export function extractClipAnalysis(variants: Array<{ generationParams: unknown 
     const record = params as Record<string, unknown>;
     const scenes = parseScenes(record.scenes);
     const captions = parseCaptions(record.captions);
-    if (scenes.length > 0 || captions.length > 0) {
-      return { scenes, captions };
+    const transcript = parseTranscript(record.transcript);
+    if (scenes.length > 0 || captions.length > 0 || transcript) {
+      return { scenes, captions, transcript };
     }
   }
-  return { scenes: [], captions: [] };
+  return { scenes: [], captions: [], transcript: null };
 }

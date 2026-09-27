@@ -37,6 +37,14 @@ export function parseRemoteClipCandidates(payload: unknown): ClipSet {
   const sceneCount = Math.max(0, Math.floor(finite(evidence?.sceneCount)));
   const captionCueCount = Math.max(0, Math.floor(finite(evidence?.captionCueCount)));
   const analysisState = text(evidence?.analysisState, "analysis_unavailable");
+  const transcript = object(record.transcript);
+  const transcriptState = transcript?.state === "word_level" || transcript?.state === "text_only" ? transcript.state : "unavailable";
+  const transcriptProvenance = transcript ? {
+    transcriptId: typeof transcript.transcriptId === "string" ? transcript.transcriptId : null,
+    provider: typeof transcript.provider === "string" ? transcript.provider : null,
+    modelVersion: typeof transcript.modelVersion === "string" ? transcript.modelVersion : null,
+    language: typeof transcript.language === "string" ? transcript.language : null,
+  } : null;
   const safeguards = arrayOfText(record.safeguards);
   const rawCandidates = Array.isArray(record.candidates) ? record.candidates : [];
   const maximumSeconds = rawCandidates.reduce((maximum, candidate) => {
@@ -79,7 +87,9 @@ export function parseRemoteClipCandidates(payload: unknown): ClipSet {
     sourceId,
     candidates,
     revision: 1,
-    transcriptVersion: sceneCount > 0 || captionCueCount > 0 ? `processor-analysis-${sceneCount}-${captionCueCount}` : null,
+    transcriptVersion: transcriptProvenance?.transcriptId ?? transcriptProvenance?.modelVersion ?? (sceneCount > 0 || captionCueCount > 0 ? `processor-analysis-${sceneCount}-${captionCueCount}` : null),
+    transcriptState,
+    transcriptProvenance,
     generatedBy: "deterministic-boundaries",
   }, Math.max(3, maximumSeconds));
 }

@@ -42,6 +42,13 @@ export type ClipSet = {
   candidates: ClipCandidate[];
   revision: number;
   transcriptVersion: string | null;
+  transcriptState: "unavailable" | "text_only" | "word_level";
+  transcriptProvenance: {
+    transcriptId: string | null;
+    provider: string | null;
+    modelVersion: string | null;
+    language: string | null;
+  } | null;
   generatedBy: "deterministic-boundaries" | "transcript-model" | "creator";
 };
 
@@ -160,6 +167,13 @@ export function normalizeClipSet(set: ClipSet, maximumSeconds: number): ClipSet 
     candidates,
     revision: Math.max(1, Math.floor(finite(set.revision, 1))),
     transcriptVersion: set.transcriptVersion?.trim() || null,
+    transcriptState: set.transcriptState === "word_level" || set.transcriptState === "text_only" ? set.transcriptState : "unavailable",
+    transcriptProvenance: set.transcriptProvenance ? {
+      transcriptId: set.transcriptProvenance.transcriptId?.trim() || null,
+      provider: set.transcriptProvenance.provider?.trim() || null,
+      modelVersion: set.transcriptProvenance.modelVersion?.trim() || null,
+      language: set.transcriptProvenance.language?.trim() || null,
+    } : null,
     generatedBy: set.generatedBy === "transcript-model" || set.generatedBy === "creator" ? set.generatedBy : "deterministic-boundaries",
   };
 }

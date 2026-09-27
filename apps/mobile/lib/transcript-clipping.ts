@@ -186,6 +186,13 @@ export function generateClipSet(
     candidates,
     revision: 1,
     transcriptVersion: transcript.provenance.transcriptId ?? transcript.provenance.modelVersion,
+    transcriptState: transcript.words.length ? "word_level" : "unavailable",
+    transcriptProvenance: {
+      transcriptId: transcript.provenance.transcriptId,
+      provider: transcript.provenance.provider,
+      modelVersion: transcript.provenance.modelVersion,
+      language: transcript.provenance.language,
+    },
     generatedBy,
   }, transcript.durationMs / 1000);
 }

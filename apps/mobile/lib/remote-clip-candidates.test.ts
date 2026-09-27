@@ -45,4 +45,21 @@ describe("remote clip candidate parser", () => {
     expect(clipSet.candidates[0]?.warnings.join(" ")).toMatch(/opening fallback/i);
     expect(clipSet.candidates[0]?.evidence.map((item) => item.kind)).not.toContain("scene_boundary");
   });
+
+  it("preserves verified word-level transcript provenance", () => {
+    const clipSet = parseRemoteClipCandidates({
+      data: {
+        videoId: "video-3",
+        platform: "instagram",
+        transcript: { state: "word_level", transcriptId: "tx-3", provider: "whisper", modelVersion: "v2", language: "en", wordCount: 42 },
+        candidates: [{ id: "transcript-1", startSeconds: 2, endSeconds: 14, source: "scene_detection", sceneNumbers: [2], captionCueCount: 3 }],
+        evidence: { sceneCount: 1, captionCueCount: 3, analysisState: "word_level_transcript_available" },
+        safeguards: [],
+      },
+    });
+
+    expect(clipSet.transcriptState).toBe("word_level");
+    expect(clipSet.transcriptVersion).toBe("tx-3");
+    expect(clipSet.transcriptProvenance).toEqual({ transcriptId: "tx-3", provider: "whisper", modelVersion: "v2", language: "en" });
+  });
 });

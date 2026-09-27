@@ -58,6 +58,10 @@ export function ClipCandidateReviewCard({ clipSet, loading = false, notice = nul
         <StatusPill tone="accent">{clipSet.candidates.length} CANDIDATES</StatusPill>
       </View>
       <Text style={[styles.copy, { color: colors.muted }]}>Candidates are ranked review suggestions from {platform} processor boundaries and recorded evidence. Accept, reject, or edit each one before any render request.</Text>
+      <Text style={[styles.provenance, { color: clipSet.transcriptState === "word_level" ? colors.success : colors.muted }]}>
+        Evidence source: {clipSet.transcriptState === "word_level" ? "verified word-level transcript" : clipSet.transcriptState === "text_only" ? "transcript text without word timing" : "scene/caption analysis only"}
+        {clipSet.transcriptProvenance?.provider ? ` · ${clipSet.transcriptProvenance.provider}` : ""}
+      </Text>
       {platforms.length ? <PlatformSelector platforms={platforms} selectedPlatform={selectedPlatform} onPlatformChange={onPlatformChange} /> : null}
       {clipSet.candidates.map((candidate, index) => (
         <View key={candidate.id} style={[styles.candidate, { borderColor: candidate.id === selectedCandidateId ? colors.primary : colors.border, backgroundColor: candidate.id === selectedCandidateId ? `${colors.primary}0D` : "transparent" }]}>
@@ -94,6 +98,7 @@ const styles = StyleSheet.create({
   headingCopy: { flex: 1, gap: 5 },
   title: { fontSize: 19, fontWeight: "900", letterSpacing: -0.25 },
   copy: { fontSize: 13, lineHeight: 19 },
+  provenance: { fontSize: 11, lineHeight: 16, fontWeight: "800" },
   boundary: { flexDirection: "row", alignItems: "flex-start", gap: 10, borderWidth: 1, borderRadius: 14, padding: 12 },
   boundaryText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: "700" },
   candidate: { gap: 10, borderWidth: 1, borderRadius: 16, padding: 12 },
