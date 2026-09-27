@@ -13,6 +13,7 @@ import axios from 'axios';
 import { query } from './db.js';
 import { spawn } from 'child_process';
 import { buildFilterComplex } from './render-filter.js';
+import { generateTranscriptArtifacts } from './transcript.js';
 
 // Platform-specific optimization specifications (Enhanced)
 const PLATFORM_SPECS = {
@@ -193,95 +194,6 @@ print(json.dumps(scenes))
     logger.warn({ err: error }, 'Scene detection failed');
     return [];
   }
-}
-
-/**
- * Generate captions using Whisper.cpp (local, fast, no GPU required)
- */
-async function generateCaptions(inputPath, language = 'auto') {
-  try {
-    // Extract audio first
-    const audioPath = `/tmp/audio_${Date.now()}.wav`;
-    await new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .outputOptions(['-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1'])
-        .on('end', () => resolve())
-        .on('error', reject)
-        .save(audioPath);
-    });
-
-    // Run Whisper.cpp
-    const whisperPath = process.env.WHISPER_PATH || '/usr/local/bin/whisper';
-    const modelPath = process.env.WHISPER_MODEL || '/models/ggml-base.en.bin';
-    
-    const result = await new Promise((resolve, reject) => {
-      const args = [
-        '-m', modelPath,
-        '-f', audioPath,
-        '-otxt', // Output text
-        '-osrt', // Output SRT
-        '-ovtt', // Output VTT
-      ];
-      
-      if (language !== 'auto') {
-        args.push('-l', language);
-      }
-      
-      const proc = spawn(whisperPath, args);
-      let stdout = '';
-      let stderr = '';
-      proc.stdout.on('data', (data) => { stdout += data.toString(); });
-      proc.stderr.on('data', (data) => { stderr += data.toString(); });
-      proc.on('close', (code) => {
-        if (code === 0) resolve(stdout);
-        else reject(new Error(stderr || `Whisper exited with code ${code}`));
-      });
-    });
-
-    // Parse SRT output for timed captions
-    const srtPath = audioPath.replace('.wav', '.srt');
-    const srtContent = await fs.readFile(srtPath, 'utf-8').catch(() => '');
-    
-    // Cleanup
-    await fs.unlink(audioPath).catch(() => {});
-    await fs.unlink(srtPath).catch(() => {});
-    await fs.unlink(audioPath.replace('.wav', '.txt')).catch(() => {});
-    await fs.unlink(audioPath.replace('.wav', '.vtt')).catch(() => {});
-
-    return parseSRT(srtContent);
-  } catch (error) {
-    logger.warn({ err: error }, 'Caption generation failed');
-    return [];
-  }
-}
-
-/**
- * Parse SRT format to structured captions
- */
-function parseSRT(srtContent) {
-  const captions = [];
-  const blocks = srtContent.trim().split('\n\n');
-  
-  for (const block of blocks) {
-    const lines = block.trim().split('\n');
-    if (lines.length >= 3) {
-      const timeLine = lines[1];
-      const text = lines.slice(2).join(' ');
-      const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})/);
-      if (timeMatch) {
-        const start = timeToSeconds(timeMatch[1]);
-        const end = timeToSeconds(timeMatch[2]);
-        captions.push({ start, end, text, duration: end - start });
-      }
-    }
-  }
-  return captions;
-}
-
-function timeToSeconds(timeStr) {
-  const [time, ms] = timeStr.split(',');
-  const [h, m, s] = time.split(':').map(Number);
-  return h * 3600 + m * 60 + s + Number(ms) / 1000;
 }
 
 /**
@@ -745,11 +657,14 @@ export async function processVideoJob(job, deps) {
       childLogger.info({ sceneCount: scenes.length }, 'Scene detection completed');
     }
     
-    // Generate captions using Whisper
+    // Generate timed captions and, when the configured Whisper build emits JSON tokens, verified word-level transcript provenance.
     let captions = [];
+    let transcript = null;
     if (shouldGenerateCaptions) {
-      captions = await generateCaptions(tempInputPath);
-      childLogger.info({ captionCount: captions.length }, 'Caption generation completed');
+      const transcriptArtifacts = await generateTranscriptArtifacts(tempInputPath);
+      captions = transcriptArtifacts.captions;
+      transcript = transcriptArtifacts.transcript;
+      childLogger.info({ captionCount: captions.length, transcriptState: transcript?.state ?? 'unavailable', wordCount: transcript?.wordCount ?? 0 }, 'Transcript artifacts generated');
     }
     
     // Extract hook variants for A/B testing
@@ -888,6 +803,7 @@ export async function processVideoJob(job, deps) {
           deduplicated: false,
           scenes: scenes,
           captions: captions,
+          transcript,
           hookVariants: hookVariants.map(h => h.variantIndex),
         });
         
@@ -913,6 +829,7 @@ export async function processVideoJob(job, deps) {
       videoHash,
       scenes: scenes.length,
       captions: captions.length,
+      transcript: transcript ? { state: transcript.state, transcriptId: transcript.transcriptId, provider: transcript.provider, modelVersion: transcript.modelVersion, language: transcript.language, wordCount: transcript.wordCount, words: transcript.words } : null,
       hookVariants: hookVariants.length,
     });
     
@@ -946,4 +863,4 @@ function streamToFile(stream, filePath) {
   });
 }
 
-export { PLATFORM_SPECS, OPTIMIZATION_MODES, buildFilterComplex, probeVideo, validateVariant, generateThumbnail, normalizeAudio, detectScenes, generateCaptions, extractHook, generateHookVariants };
+export { PLATFORM_SPECS, OPTIMIZATION_MODES, buildFilterComplex, probeVideo, validateVariant, generateThumbnail, normalizeAudio, detectScenes, generateTranscriptArtifacts, extractHook, generateHookVariants };
