@@ -62,4 +62,21 @@ describe("remote clip candidate parser", () => {
     expect(clipSet.transcriptVersion).toBe("tx-3");
     expect(clipSet.transcriptProvenance).toEqual({ transcriptId: "tx-3", provider: "whisper", modelVersion: "v2", language: "en" });
   });
+
+  it("maps transcript-boundary drafts as complete-thought candidates", () => {
+    const clipSet = parseRemoteClipCandidates({
+      data: {
+        videoId: "video-4",
+        platform: "youtube",
+        transcript: { state: "word_level", transcriptId: "tx-4", provider: "whisper", modelVersion: "v2", language: "en", wordCount: 16 },
+        candidates: [{ id: "transcript-1", startSeconds: 1, endSeconds: 9, source: "transcript_boundary", sceneNumbers: [], captionCueCount: 0, rationale: "Uses verified word-level transcript boundaries." }],
+        evidence: { sceneCount: 0, captionCueCount: 0, analysisState: "word_level_transcript_available" },
+        safeguards: [],
+      },
+    });
+
+    expect(clipSet.candidates[0]?.title).toContain("transcript boundary");
+    expect(clipSet.candidates[0]?.evidence.map((item) => item.kind)).toContain("complete_thought");
+    expect(clipSet.candidates[0]?.warnings.join(" ")).toMatch(/transcript boundaries do not predict/i);
+  });
 });

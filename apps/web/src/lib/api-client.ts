@@ -182,7 +182,7 @@ export type ClipCandidate = {
   startSeconds: number;
   endSeconds: number;
   durationSeconds: number;
-  source: 'scene_detection' | 'opening_fallback';
+  source: 'scene_detection' | 'transcript_boundary' | 'opening_fallback';
   sceneNumbers: number[];
   captionCueCount: number;
   rationale: string;
@@ -193,7 +193,8 @@ export type ClipCandidateResponse = {
   videoId: string;
   platform: string;
   candidates: ClipCandidate[];
-  evidence: { sceneCount: number; captionCueCount: number; analysisState: 'scene_detection_available' | 'opening_fallback_only' };
+  transcript: { state: 'unavailable' | 'text_only' | 'word_level'; transcriptId: string | null; provider: string | null; modelVersion: string | null; language: string | null; wordCount: number };
+  evidence: { sceneCount: number; captionCueCount: number; analysisState: 'scene_detection_available' | 'word_level_transcript_available' | 'opening_fallback_only' };
   safeguards: string[];
 };
 

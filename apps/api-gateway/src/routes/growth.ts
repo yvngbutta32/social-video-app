@@ -24,7 +24,7 @@ import { createPrivatePreviewUrl } from '../lib/source-storage.js';
 type ReadinessScheduledPost = { status: 'draft' | 'scheduled' | 'posting' | 'posted' | 'failed' | 'cancelled'; retryCount: number; errorMessage?: string | null };
 type LearningRouteMetric = { views?: number | bigint | string | { toString(): string } | null; likes?: number | bigint | string | { toString(): string } | null; comments?: number | bigint | string | { toString(): string } | null; shares?: number | bigint | string | { toString(): string } | null; saves?: number | bigint | string | { toString(): string } | null; followerGain?: number | bigint | string | { toString(): string } | null; completionRate?: number | bigint | string | { toString(): string } | null };
 type ScorecardRouteMetric = LearningRouteMetric & { scheduledPostId: string; variantId?: string | null; platform: string; recordedAt: Date; importedAt: Date | null; provenance: unknown };
-import { createClipCandidates, extractClipAnalysis } from '../lib/clip-candidates.js';
+import { createClipCandidates, createTranscriptClipCandidates, extractClipAnalysis } from '../lib/clip-candidates.js';
 import {
   adaptationRecipeSchema,
   applyManualAdaptationEdit,
@@ -252,12 +252,13 @@ export function createGrowthRoutes() {
       durationSeconds: video.durationSeconds,
     });
     const { scenes, captions, transcript } = extractClipAnalysis(video.variants);
-    const candidates = createClipCandidates({
-      durationSeconds: video.durationSeconds,
-      preferredDurationSeconds: automaticRecipe.sourceRange.endSeconds - automaticRecipe.sourceRange.startSeconds,
-      scenes,
-      captions,
-    });
+    const preferredDurationSeconds = automaticRecipe.sourceRange.endSeconds - automaticRecipe.sourceRange.startSeconds;
+    const transcriptCandidates = transcript
+      ? createTranscriptClipCandidates({ durationSeconds: Math.max(0, video.durationSeconds ?? 0), preferredDurationSeconds, transcript })
+      : [];
+    const candidates = transcriptCandidates.length > 0
+      ? transcriptCandidates
+      : createClipCandidates({ durationSeconds: video.durationSeconds, preferredDurationSeconds, scenes, captions });
 
     return c.json({
       data: {
@@ -271,6 +272,7 @@ export function createGrowthRoutes() {
           modelVersion: null,
           language: null,
           wordCount: 0,
+          words: [],
         },
         evidence: {
           sceneCount: scenes.length,

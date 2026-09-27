@@ -38,6 +38,14 @@ export type ClipTranscriptProvenance = {
   modelVersion: string | null;
   language: string | null;
   wordCount: number;
+  words: Array<{
+    id: string;
+    startMs: number;
+    endMs: number;
+    text: string;
+    speaker: string | null;
+    confidence: number | null;
+  }>;
 };
 
 export type ClipCandidate = {
@@ -45,7 +53,7 @@ export type ClipCandidate = {
   startSeconds: number;
   endSeconds: number;
   durationSeconds: number;
-  source: 'scene_detection' | 'opening_fallback';
+  source: 'scene_detection' | 'transcript_boundary' | 'opening_fallback';
   sceneNumbers: number[];
   captionCueCount: number;
   rationale: string;
@@ -87,6 +95,14 @@ function parseTranscript(value: unknown): ClipTranscriptProvenance | null {
     modelVersion: transcript.modelVersion ?? null,
     language: transcript.language ?? null,
     wordCount,
+    words: (transcript.words ?? []).map((word, index) => ({
+      id: word.id ?? `word-${index + 1}`,
+      startMs: word.startMs,
+      endMs: word.endMs,
+      text: word.text.trim(),
+      speaker: word.speaker ?? null,
+      confidence: word.confidence ?? null,
+    })),
   };
 }
 
@@ -97,6 +113,66 @@ function uniqueAnchors(scenes: z.infer<typeof sceneSchema>[], durationSeconds: n
     .map((index) => scenes[index])
     .filter((scene) => scene && scene.start_time < durationSeconds)
     .filter((scene, index, all) => all.findIndex((other) => other.start_time === scene.start_time) === index);
+}
+
+function roundMilliseconds(value: number) {
+  return Math.round(value / 10) * 10;
+}
+
+export function createTranscriptClipCandidates(input: {
+  durationSeconds: number;
+  preferredDurationSeconds: number;
+  transcript: ClipTranscriptProvenance;
+  limit?: number;
+}): ClipCandidate[] {
+  if (input.transcript.state !== 'word_level' || input.transcript.words.length === 0) return [];
+  const words = input.transcript.words;
+  const minDurationMs = 6_000;
+  const maxDurationMs = Math.max(minDurationMs, Math.min(60_000, Math.round(input.preferredDurationSeconds * 1000)));
+  const limit = Math.min(Math.max(input.limit ?? 3, 1), 5);
+  const candidates: ClipCandidate[] = [];
+  let startIndex = 0;
+
+  while (startIndex < words.length && candidates.length < limit) {
+    const first = words[startIndex];
+    let endIndex = startIndex;
+    let selectedEndIndex = -1;
+    while (endIndex < words.length) {
+      const last = words[endIndex];
+      const durationMs = last.endMs - first.startMs;
+      if (durationMs > maxDurationMs) break;
+      const completeThought = /[.!?؟。！？]$/.test(last.text);
+      const speakerTurn = endIndex < words.length - 1
+        && words[endIndex + 1]?.speaker !== last.speaker
+        && Boolean(words[endIndex + 1]?.speaker || last.speaker);
+      if ((completeThought || speakerTurn || endIndex === words.length - 1) && durationMs >= minDurationMs) {
+        selectedEndIndex = endIndex;
+        break;
+      }
+      endIndex += 1;
+    }
+    if (selectedEndIndex < 0) {
+      startIndex += 1;
+      continue;
+    }
+    const last = words[selectedEndIndex];
+    const startSeconds = roundMilliseconds(first.startMs) / 1000;
+    const endSeconds = Math.min(input.durationSeconds, roundMilliseconds(last.endMs) / 1000);
+    const summary = words.slice(startIndex, selectedEndIndex + 1).map((word) => word.text).join(' ').replace(/\s+([,.!?])/g, '$1').trim();
+    candidates.push({
+      id: `transcript-${candidates.length + 1}-${Math.round(startSeconds * 10)}-${Math.round(endSeconds * 10)}`,
+      startSeconds,
+      endSeconds,
+      durationSeconds: roundMilliseconds(last.endMs - first.startMs) / 1000,
+      source: 'transcript_boundary',
+      sceneNumbers: [],
+      captionCueCount: 0,
+      rationale: `Uses verified word-level transcript boundaries${summary ? `: “${summary.slice(0, 96)}${summary.length > 96 ? '…' : ''}”` : '.'} This is an explainable editing draft, not a performance prediction.`,
+      safeguards: ['Creator review is required before rendering.', 'Transcript boundaries do not predict reach, followers, likes, or views.'],
+    });
+    startIndex = selectedEndIndex + 1;
+  }
+  return candidates;
 }
 
 export function createClipCandidates(input: {

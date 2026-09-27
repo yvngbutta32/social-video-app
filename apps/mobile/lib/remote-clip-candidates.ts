@@ -58,25 +58,27 @@ export function parseRemoteClipCandidates(payload: unknown): ClipSet {
     const endSeconds = Math.max(startSeconds + 0.5, finite(item.endSeconds, startSeconds + 3));
     const sceneNumbers = arrayOfNumbers(item.sceneNumbers);
     const candidateCaptionCount = Math.max(0, Math.floor(finite(item.captionCueCount)));
-    const source = item.source === "scene_detection" ? "scene_detection" : "opening_fallback";
+    const source = item.source === "scene_detection" || item.source === "transcript_boundary" ? item.source : "opening_fallback";
     const candidateSafeguards = [...safeguards, ...arrayOfText(item.safeguards)];
     return normalizeClipCandidate({
       id: text(item.id, `remote-candidate-${index + 1}`),
       sourceId,
       range: { trimStartSeconds: startSeconds, trimEndSeconds: endSeconds },
-      title: `${platform} ${source === "scene_detection" ? "scene boundary" : "opening range"}`,
+      title: `${platform} ${source === "transcript_boundary" ? "transcript boundary" : source === "scene_detection" ? "scene boundary" : "opening range"}`,
       summary: text(item.rationale, "Review this server-generated range before accepting it."),
       signals: {
         sceneBoundary: source === "scene_detection" ? 1 : 0,
-        cleanStart: source === "scene_detection" ? 1 : 0.5,
-        cleanEnd: source === "scene_detection" ? 1 : 0.5,
+        completeThought: source === "transcript_boundary" ? 1 : 0,
+        cleanStart: source === "opening_fallback" ? 0.5 : 1,
+        cleanEnd: source === "opening_fallback" ? 0.5 : 1,
         visualChange: source === "scene_detection" ? 0.5 : 0,
         topicMatch: candidateCaptionCount > 0 ? 0.25 : 0,
       },
-      confidence: source === "scene_detection" ? 0.6 : 0.25,
+      confidence: source === "transcript_boundary" ? 0.7 : source === "scene_detection" ? 0.6 : 0.25,
       warnings: [
         ...candidateSafeguards,
         ...(candidateCaptionCount > 0 ? [`${candidateCaptionCount} timed caption cue${candidateCaptionCount === 1 ? "" : "s"} overlap this range.`] : ["No timed caption cues were attached to this candidate."]),
+        ...(source === "transcript_boundary" ? ["Transcript boundaries do not predict reach, followers, likes, or views."] : []),
         ...(analysisState === "opening_fallback_only" ? ["Processor scene analysis is unavailable; this is an editable opening fallback."] : []),
       ],
     }, Math.max(3, maximumSeconds));
