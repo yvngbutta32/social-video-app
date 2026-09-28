@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
   applyManualAdaptationEdit,
@@ -7,6 +9,7 @@ import {
 import { createClipCandidates, createTranscriptClipCandidates, extractClipAnalysis } from '../src/lib/clip-candidates.js';
 
 const sourceVideoId = '11111111-1111-4111-8111-111111111111';
+const sharedTranscript = JSON.parse(readFileSync(resolve(process.cwd(), '../../contracts/fixtures/word-level-transcript.json'), 'utf8'));
 const scenes = [
   { scene_number: 1, start_time: 0, end_time: 12, duration: 12 },
   { scene_number: 2, start_time: 15, end_time: 29, duration: 14 },
@@ -17,16 +20,7 @@ const captions = [
   { start: 16, end: 19, text: 'Second cue' },
   { start: 38, end: 45, text: 'Third cue' },
 ];
-const transcript = {
-  transcriptId: 'tx-1',
-  provider: 'whisper',
-  modelVersion: 'v2',
-  language: 'en',
-  words: [
-    { id: 'w-1', startMs: 0, endMs: 4000, text: 'Opening', confidence: 0.98 },
-    { id: 'w-2', startMs: 4500, endMs: 7000, text: 'proof.', confidence: 0.97 },
-  ],
-};
+const transcript = sharedTranscript;
 
 const candidates = createClipCandidates({
   durationSeconds: 60,
@@ -56,8 +50,9 @@ const extracted = extractClipAnalysis([{ generationParams: { scenes, captions, t
 assert.equal(extracted.scenes.length, 3);
 assert.equal(extracted.captions.length, 3);
 assert.equal(extracted.transcript?.state, 'word_level');
-assert.equal(extracted.transcript?.transcriptId, 'tx-1');
-assert.equal(extracted.transcript?.wordCount, 2);
+assert.equal(extracted.transcript?.transcriptId, sharedTranscript.transcriptId);
+assert.equal(extracted.transcript?.wordCount, sharedTranscript.wordCount);
+assert.deepEqual(extracted.transcript?.words, sharedTranscript.words);
 const transcriptCandidates = createTranscriptClipCandidates({
   durationSeconds: 60,
   preferredDurationSeconds: 12,
@@ -66,6 +61,22 @@ const transcriptCandidates = createTranscriptClipCandidates({
 assert.equal(transcriptCandidates.length, 1);
 assert.equal(transcriptCandidates[0]?.source, 'transcript_boundary');
 assert.match(transcriptCandidates[0]?.rationale ?? '', /verified word-level transcript boundaries/i);
+assert.equal(transcriptCandidates[0]?.startSeconds, 0);
+assert.equal(transcriptCandidates[0]?.endSeconds, 8.8);
+
+const mismatchedTranscript = extractClipAnalysis([{ generationParams: {
+  transcript: { ...sharedTranscript, wordCount: sharedTranscript.wordCount + 1 },
+} }]);
+assert.equal(mismatchedTranscript.transcript, null);
+
+const overlappingTranscript = extractClipAnalysis([{ generationParams: {
+  transcript: { ...sharedTranscript, words: [
+    sharedTranscript.words[0],
+    { ...sharedTranscript.words[1], startMs: 1_000 },
+    ...sharedTranscript.words.slice(2),
+  ] },
+} }]);
+assert.equal(overlappingTranscript.transcript, null);
 
 const automaticRecipe = createAutomaticAdaptationRecipe({
   platform: 'tiktok',
@@ -83,4 +94,4 @@ assert.equal(creatorSelectedRecipe.sourceRange.selectionMethod, 'scene_candidate
 assert.equal(creatorSelectedRecipe.sourceRange.startSeconds, 15);
 assert.equal(creatorSelectedRecipe.provenance.revision, 2);
 
-console.log('Scene-aware clip candidate contract verified.');
+console.log('Transcript-aware and scene-aware clip candidate contract verified.');

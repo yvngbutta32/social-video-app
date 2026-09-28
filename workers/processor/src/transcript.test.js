@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { parseWhisperJson } from './transcript-parser.js';
+
+const sharedFixture = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), '../../contracts/fixtures/word-level-transcript.json'), 'utf8'));
 
 describe('Whisper transcript artifact parsing', () => {
   it('normalizes whisper.cpp token offsets into verified word-level cues', () => {
@@ -34,5 +38,18 @@ describe('Whisper transcript artifact parsing', () => {
   it('does not fabricate transcript data for malformed or empty output', () => {
     expect(parseWhisperJson('not-json').state).toBe('unavailable');
     expect(parseWhisperJson('').state).toBe('unavailable');
+  });
+
+  it('matches the shared persisted artifact contract used by the API gateway', () => {
+    const parsed = parseWhisperJson(JSON.stringify({
+      result: { language: sharedFixture.language },
+      transcription: [{ tokens: sharedFixture.words.map(({ text, startMs, endMs, confidence }) => ({
+        text,
+        offsets: { from: startMs, to: endMs },
+        p: confidence,
+      })) }],
+    }), { modelVersion: sharedFixture.modelVersion });
+
+    expect(parsed).toEqual(sharedFixture);
   });
 });

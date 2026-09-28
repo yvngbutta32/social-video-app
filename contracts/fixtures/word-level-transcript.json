@@ -1,0 +1,14 @@
+{
+  "state": "word_level",
+  "transcriptId": "7a5aa0354e494338",
+  "provider": "whisper.cpp",
+  "modelVersion": "ggml-base.en.bin",
+  "language": "en",
+  "wordCount": 4,
+  "words": [
+    { "id": "word-1", "startMs": 0, "endMs": 1800, "text": "Build", "confidence": 0.98, "speaker": null },
+    { "id": "word-2", "startMs": 1900, "endMs": 3600, "text": "with", "confidence": 0.97, "speaker": null },
+    { "id": "word-3", "startMs": 3700, "endMs": 5200, "text": "evidence.", "confidence": 0.96, "speaker": null },
+    { "id": "word-4", "startMs": 7000, "endMs": 8800, "text": "Review.", "confidence": 0.95, "speaker": null }
+  ]
+}

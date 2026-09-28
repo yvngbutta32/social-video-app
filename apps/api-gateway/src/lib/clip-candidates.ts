@@ -22,13 +22,34 @@ const transcriptWordSchema = z.object({
   confidence: z.number().finite().min(0).max(1).nullable().optional(),
 }).refine((word) => word.endMs > word.startMs);
 
+const transcriptWordsSchema = z.array(transcriptWordSchema).superRefine((words, context) => {
+  for (let index = 1; index < words.length; index += 1) {
+    const previous = words[index - 1];
+    const current = words[index];
+    if (!previous || !current) continue;
+    if (current.startMs < previous.startMs) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'startMs'], message: 'Transcript words must be ordered by start time' });
+    }
+    if (current.startMs < previous.endMs) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'startMs'], message: 'Transcript words must not overlap' });
+    }
+  }
+});
+
 const transcriptSchema = z.object({
+  state: z.enum(['unavailable', 'text_only', 'word_level']).optional(),
   transcriptId: z.string().min(1).nullable().optional(),
   provider: z.string().min(1).nullable().optional(),
   modelVersion: z.string().min(1).nullable().optional(),
   language: z.string().min(1).nullable().optional(),
   text: z.string().min(1).optional(),
-  words: z.array(transcriptWordSchema).optional(),
+  wordCount: z.number().int().nonnegative().optional(),
+  words: transcriptWordsSchema.optional(),
+}).superRefine((transcript, context) => {
+  const actualWordCount = transcript.words?.length ?? 0;
+  if (transcript.wordCount !== undefined && transcript.wordCount !== actualWordCount) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['wordCount'], message: 'Transcript wordCount must match words.length' });
+  }
 });
 
 export type ClipTranscriptProvenance = {
