@@ -14,6 +14,7 @@ import { query } from './db.js';
 import { spawn } from 'child_process';
 import { buildFilterComplex } from './render-filter.js';
 import { generateTranscriptArtifacts } from './transcript.js';
+import { buildPythonInvocation } from './processor-command.js';
 
 // Platform-specific optimization specifications (Enhanced)
 const PLATFORM_SPECS = {
@@ -151,9 +152,9 @@ cap.release()
 /**
  * Run Python script and return stdout
  */
-function runPythonScript(script, arg) {
+function runPythonScript(script, ...args) {
   return new Promise((resolve, reject) => {
-    const py = spawn('python3', ['-c', script, arg]);
+    const py = spawn('python3', buildPythonInvocation(script, ...args));
     let stdout = '';
     let stderr = '';
     py.stdout.on('data', (data) => { stdout += data.toString(); });

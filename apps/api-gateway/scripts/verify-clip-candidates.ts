@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   applyManualAdaptationEdit,
@@ -9,7 +9,7 @@ import {
 import { createClipCandidates, createTranscriptClipCandidates, extractClipAnalysis } from '../src/lib/clip-candidates.js';
 
 const sourceVideoId = '11111111-1111-4111-8111-111111111111';
-const sharedTranscript = JSON.parse(readFileSync(resolve(process.cwd(), '../../contracts/fixtures/word-level-transcript.json'), 'utf8'));
+const sharedTranscript = JSON.parse(readFileSync(fileURLToPath(new URL('../../../contracts/fixtures/word-level-transcript.json', import.meta.url)), 'utf8'));
 const scenes = [
   { scene_number: 1, start_time: 0, end_time: 12, duration: 12 },
   { scene_number: 2, start_time: 15, end_time: 29, duration: 14 },

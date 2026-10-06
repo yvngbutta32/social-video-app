@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'fs';
-import path from 'path';
+import { fileURLToPath } from 'url';
 import { parseWhisperJson } from './transcript-parser.js';
 
-const sharedFixture = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), '../../contracts/fixtures/word-level-transcript.json'), 'utf8'));
+const sharedFixture = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../../contracts/fixtures/word-level-transcript.json', import.meta.url)), 'utf8'));
 
 describe('Whisper transcript artifact parsing', () => {
   it('normalizes whisper.cpp token offsets into verified word-level cues', () => {
