@@ -622,6 +622,8 @@ export async function processVideoJob(job, deps) {
   const { pgPool, redis, config, logger } = deps;
   const { videoId, platforms = Object.keys(PLATFORM_SPECS), optimization = 'auto', generateThumbnails = true, generateCaptions: shouldGenerateCaptions = true, detectScenes: shouldDetectScenes = true, extractHooks = true } = job.data;
   const childLogger = logger.child({ jobId: job.id, videoId });
+  let tempInputPath = null;
+  let hookVariants = [];
   
   childLogger.info({ platforms, optimization, generateThumbnails, shouldGenerateCaptions, shouldDetectScenes, extractHooks }, 'Starting optimized video processing');
   await updateVideoProgress(videoId, { state: 'processing', phase: 'initializing', completedPlatforms: 0, totalPlatforms: platforms.length, percent: 0, updatedAt: new Date().toISOString() });
@@ -642,7 +644,7 @@ export async function processVideoJob(job, deps) {
     }
     
     // Save to temp file
-    const tempInputPath = `/tmp/input_${videoId}_${Date.now()}.mp4`;
+    tempInputPath = `/tmp/input_${videoId}_${Date.now()}.mp4`;
     await streamToFile(originalStream, tempInputPath);
     const probe = await probeVideo(tempInputPath);
     const duration = probe.format.duration || 0;
@@ -669,7 +671,6 @@ export async function processVideoJob(job, deps) {
     }
     
     // Extract hook variants for A/B testing
-    let hookVariants = [];
     if (extractHooks) {
       hookVariants = await generateHookVariants(tempInputPath, getPlatformSpec(platforms[0]));
       childLogger.info({ hookCount: hookVariants.length }, 'Hook variants extracted');
@@ -738,10 +739,13 @@ export async function processVideoJob(job, deps) {
         optimizationMode,
         videoHash,
       });
-      
+      let outputPath = null;
+      let normalizedPath = null;
+      let thumbnailPath = null;
+      let uploadCompleted = false;
+      let thumbnailUploadId = null;
+      let thumbnailUploadKey = null;
       try {
-        let outputPath;
-        
         // Apply viral optimization if requested
         if (optimizationMode === 'viral_optimize') {
           outputPath = await createViralOptimized(tempInputPath, spec, {
@@ -753,7 +757,7 @@ export async function processVideoJob(job, deps) {
         }
         
         // Normalize audio
-        const normalizedPath = `/tmp/norm_${Date.now()}.mp4`;
+        normalizedPath = `/tmp/norm_${Date.now()}.mp4`;
         await normalizeAudio(outputPath, normalizedPath, spec);
         
         // Validate variant
@@ -775,18 +779,19 @@ export async function processVideoJob(job, deps) {
         }
         
         const etag = await completeMultipart(variantS3Key, uploadId, uploadedParts);
+        uploadCompleted = true;
         
         // Generate thumbnail
         let thumbnailKey = null;
         if (generateThumbnails) {
-          const thumbPath = `/tmp/thumb_${videoId}_${platform}_${Date.now()}.jpg`;
-          await generateThumbnail(normalizedPath, spec, thumbPath);
-          const thumbKey = `thumbnails/${videoId}/${platform}_${videoHash}.jpg`;
-          const thumbUploadId = await uploadMultipart(thumbKey, 'image/jpeg', { videoId, platform });
-          const thumbPart = await uploadPart(thumbKey, thumbUploadId, 1, await fs.readFile(thumbPath));
-          await completeMultipart(thumbKey, thumbUploadId, [thumbPart]);
-          thumbnailKey = thumbKey;
-          thumbnails.push({ platform, s3Key: thumbKey });
+          thumbnailPath = `/tmp/thumb_${videoId}_${platform}_${Date.now()}.jpg`;
+          await generateThumbnail(normalizedPath, spec, thumbnailPath);
+          thumbnailUploadKey = `thumbnails/${videoId}/${platform}_${videoHash}.jpg`;
+          thumbnailUploadId = await uploadMultipart(thumbnailUploadKey, 'image/jpeg', { videoId, platform });
+          const thumbPart = await uploadPart(thumbnailUploadKey, thumbnailUploadId, 1, await fs.readFile(thumbnailPath));
+          await completeMultipart(thumbnailUploadKey, thumbnailUploadId, [thumbPart]);
+          thumbnailKey = thumbnailUploadKey;
+          thumbnails.push({ platform, s3Key: thumbnailUploadKey });
         }
         
         // Create variant record
@@ -811,13 +816,12 @@ export async function processVideoJob(job, deps) {
         variants.push({ platform, variantId: variant.id, s3Key: variantS3Key, optimizationMode, validation: validation.valid });
         await updateVideoProgress(videoId, { state: 'processing', phase: 'platform_complete', platform, completedPlatforms: platformIndex + 1, totalPlatforms: platforms.length, percent: Math.round(((platformIndex + 1) / platforms.length) * 100), updatedAt: new Date().toISOString() });
         
-        // Cleanup temp files
-        await fs.unlink(normalizedPath).catch(() => {});
-        await fs.unlink(outputPath).catch(() => {});
-        
       } catch (error) {
-        await abortMultipart(variantS3Key, uploadId);
+        if (!uploadCompleted) await abortMultipart(variantS3Key, uploadId).catch(() => {});
+        if (thumbnailUploadId && thumbnailUploadKey) await abortMultipart(thumbnailUploadKey, thumbnailUploadId).catch(() => {});
         throw error;
+      } finally {
+        await Promise.all([outputPath, normalizedPath, thumbnailPath].filter(Boolean).map((filePath) => fs.unlink(filePath).catch(() => {})));
       }
     }
     
@@ -834,14 +838,6 @@ export async function processVideoJob(job, deps) {
       hookVariants: hookVariants.length,
     });
     
-    // Cleanup original temp file
-    await fs.unlink(tempInputPath).catch(() => {});
-    
-    // Cleanup hook variant temp files
-    for (const hv of hookVariants) {
-      await fs.unlink(hv.path).catch(() => {});
-    }
-    
     childLogger.info({ variants: variants.length, thumbnails: thumbnails.length, scenes: scenes.length, captions: captions.length }, 'Video processing completed');
     
     return { success: true, variants, thumbnails, videoHash, scenes, captions, hookVariants };
@@ -851,6 +847,11 @@ export async function processVideoJob(job, deps) {
     await updateVideoProgress(videoId, { state: 'failed', phase: 'error', error: error.message, retryable: true, updatedAt: new Date().toISOString() });
     await updateVideoStatus(videoId, 'failed', { error: error.message, failedAt: new Date().toISOString() });
     throw error;
+  } finally {
+    await Promise.all([
+      tempInputPath,
+      ...hookVariants.map((hookVariant) => hookVariant.path),
+    ].filter(Boolean).map((filePath) => fs.unlink(filePath).catch(() => {})));
   }
 }
 
