@@ -9,7 +9,8 @@
     "dev": "node --watch src/index.js",
     "test": "vitest run",
     "lint": "eslint src/",
-    "test:render-filter": "node scripts/verify-render-filter.js"
+    "test:render-filter": "node scripts/verify-render-filter.js",
+    "verify:staging-preflight": "node scripts/verify-staging-preflight.js"
   },
   "dependencies": {
     "bullmq": "^5.8.0",

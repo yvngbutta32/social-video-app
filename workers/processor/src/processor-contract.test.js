@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPythonInvocation } from './processor-command.js';
 import { cleanupFiles } from './processor-cleanup.js';
+import { buildConfigurationChecks } from './staging-preflight.js';
 
 describe('processor command boundaries', () => {
   it('preserves every positional argument for Python analysis scripts', () => {
@@ -26,5 +27,21 @@ describe('processor command boundaries', () => {
       null,
     ], unlink)).resolves.toEqual(['/tmp/input.mp4', '/tmp/missing.mp4']);
     expect(removed).toEqual(['/tmp/input.mp4', '/tmp/missing.mp4']);
+  });
+
+  it('requires staging secrets and a 32-character encryption key without exposing values', () => {
+    expect(buildConfigurationChecks({
+      DB_PASSWORD: 'present',
+      MINIO_ACCESS_KEY: 'present',
+      MINIO_SECRET_KEY: 'present',
+      ENCRYPTION_KEY: '12345678901234567890123456789012',
+    })).toEqual({
+      dbPassword: true,
+      minioAccessKey: true,
+      minioSecretKey: true,
+      encryptionKey: true,
+    });
+
+    expect(buildConfigurationChecks({ ENCRYPTION_KEY: 'too-short' }).encryptionKey).toBe(false);
   });
 });
