@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { creatorTargetPlatforms, type CreatorTargetPlatform, type MobileEditRecipe, type MobileSource } from "./creator-workflow";
+import { creatorTargetPlatforms, type CreatorTargetPlatform, type MobileEditRecipe, type MobileSource } from "./creator-workflow-types";
 import { normalizeAdaptationBrief } from "./adaptation-brief";
 
 const CREATOR_STATE_KEY = "viralboost.creator.local-state.v1";

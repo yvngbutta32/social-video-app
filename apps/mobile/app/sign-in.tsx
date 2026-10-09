@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 
 import { CreatorCard, Eyebrow, StatusPill } from "@/components/creator-ui";
@@ -53,7 +53,7 @@ export default function SignInScreen() {
 
   return (
     <ScreenContainer className="px-5" edges={["top", "bottom", "left", "right"]}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}><Pressable onPress={() => router.back()} style={({ pressed }) => [styles.back, { backgroundColor: colors.surface, borderColor: colors.border }, pressed && styles.pressed]}><IconSymbol name="chevron.left" size={22} color={colors.foreground} /></Pressable><View><Eyebrow>Invite-only access</Eyebrow><Text style={[styles.title, { color: colors.foreground }]}>Connect your workspace</Text></View></View>
         <CreatorCard style={styles.card}>
           <StatusPill tone={apiConfigured ? "ready" : "attention"}>{apiConfigured ? "SECURE API CONFIGURED" : "API CONFIGURATION REQUIRED"}</StatusPill>
@@ -64,7 +64,7 @@ export default function SignInScreen() {
           {!candidate ? <Pressable onPress={signIn} disabled={busy} style={({ pressed }) => [styles.button, { backgroundColor: colors.primary }, (pressed || busy) && styles.pressed]}>{busy ? <ActivityIndicator color={colors.background} /> : <Text style={[styles.buttonText, { color: colors.background }]}>Continue securely</Text>}</Pressable> : <Pressable onPress={() => { setCandidate(null); setNotice(null); }} disabled={busy} style={({ pressed }) => [styles.reset, { borderColor: colors.border }, pressed && styles.pressed]}><Text style={[styles.resetText, { color: colors.foreground }]}>Use another invitation</Text></Pressable>}
         </CreatorCard>
         <Text style={[styles.footer, { color: colors.muted }]}>Need access? A developer can issue or revoke pilot invitations, but cannot edit, approve, or publish your media.</Text>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }

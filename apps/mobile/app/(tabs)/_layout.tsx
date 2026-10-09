@@ -16,24 +16,23 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.tint,
+        tabBarInactiveTintColor: colors.muted,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
           paddingTop: 7,
           paddingBottom: bottomPadding,
           height: tabBarHeight,
-          marginHorizontal: 12,
-          marginBottom: Platform.OS === "web" ? 10 : 6,
-          borderRadius: 22,
+          marginHorizontal: Platform.OS === "web" ? 0 : 12,
+          marginBottom: 0,
+          borderRadius: Platform.OS === "web" ? 0 : 18,
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          shadowColor: colors.background,
-          shadowOpacity: 0.25,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 8 },
+          boxShadow: `0px 8px 16px ${colors.background}29`,
           elevation: 8,
         },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "700" },
       }}
     >
       <Tabs.Screen

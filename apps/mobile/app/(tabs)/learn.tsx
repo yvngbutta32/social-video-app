@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CreatorCard, Eyebrow, StatusPill } from "@/components/creator-ui";
 import { ScreenContainer } from "@/components/screen-container";
@@ -11,6 +12,8 @@ import { getSourceAnalytics } from "@/lib/viralboost-api";
 
 export default function LearnScreen() {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const contentBottomInset = Math.max(insets.bottom + 72, 84);
   const { selectedSourceId, sources } = useCreatorWorkflow();
   const source = useMemo(() => sources.find((item) => item.id === selectedSourceId && item.serverVideoId) ?? sources.find((item) => item.serverVideoId) ?? null, [selectedSourceId, sources]);
   const [analytics, setAnalytics] = useState<SourceAnalytics | null>(null);
@@ -28,8 +31,8 @@ export default function LearnScreen() {
 
   useEffect(() => { void refresh(); }, [refresh]);
   return (
-    <ScreenContainer className="px-5" safeAreaClassName="pt-2">
-      <View style={styles.content}>
+    <ScreenContainer className="px-5">
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: contentBottomInset }]} showsVerticalScrollIndicator={false}>
         <Eyebrow>Evidence, not hype</Eyebrow>
         <Text style={[styles.title, { color: colors.foreground }]}>Learn from your own results.</Text>
         <Text style={[styles.copy, { color: colors.muted }]}>ViralBoost will compare approved adaptations with your own workspace baseline after authorized platform metrics arrive. It never treats a small sample as proof.</Text>
@@ -41,7 +44,7 @@ export default function LearnScreen() {
           <Text style={[styles.cardCopy, { color: colors.muted }]}>{analytics ? "These are server-returned aggregates from connected platform records. They are observations, not a prediction or guarantee of future reach." : source?.serverVideoId ? (notice ?? "The selected source is connected, but the API has not returned complete outcome metrics yet.") : "Import and securely upload an original source, then connect authorized platform metrics to begin evidence-based comparison."}</Text>
           {source?.serverVideoId ? <Pressable onPress={() => void refresh()} disabled={loading} style={({ pressed }) => [styles.refresh, { borderColor: colors.border }, (pressed || loading) && styles.pressed]}>{loading ? <ActivityIndicator color={colors.primary} /> : <><IconSymbol name="arrow.triangle.2.circlepath" size={18} color={colors.primary} /><Text style={[styles.refreshText, { color: colors.foreground }]}>Refresh outcome data</Text></>}</Pressable> : null}
         </CreatorCard>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
@@ -50,4 +53,4 @@ function Metric({ label, value, colors }: { label: string; value: string; colors
   return <View style={[styles.metric, { backgroundColor: `${colors.primary}10` }]}><Text style={[styles.metricValue, { color: colors.foreground }]}>{value}</Text><Text style={[styles.metricLabel, { color: colors.muted }]}>{label}</Text></View>;
 }
 
-const styles = StyleSheet.create({ content: { gap: 14, paddingTop: 22, paddingBottom: 26 }, title: { fontSize: 32, lineHeight: 38, fontWeight: "800", letterSpacing: -0.95 }, copy: { fontSize: 14, lineHeight: 22 }, card: { marginTop: 8, gap: 14, padding: 20, backgroundColor: "#0C1B2D" }, icon: { width: 62, height: 62, borderRadius: 21, alignItems: "center", justifyContent: "center" }, cardTitle: { fontSize: 22, lineHeight: 29, fontWeight: "800", letterSpacing: -0.4 }, cardCopy: { fontSize: 14, lineHeight: 22 }, metrics: { flexDirection: "row", flexWrap: "wrap", gap: 9 }, metric: { minWidth: "46%", flexGrow: 1, borderRadius: 16, padding: 14, gap: 4, borderWidth: 1, borderColor: "#284964" }, metricValue: { fontSize: 22, fontWeight: "800", letterSpacing: -0.4 }, metricLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7, textTransform: "uppercase" }, refresh: { height: 50, borderRadius: 15, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#13273B" }, refreshText: { fontSize: 14, fontWeight: "900" }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] } });
+const styles = StyleSheet.create({ content: { gap: 14, paddingTop: 22 }, title: { fontSize: 32, lineHeight: 38, fontWeight: "800", letterSpacing: -0.95 }, copy: { fontSize: 14, lineHeight: 22 }, card: { marginTop: 8, gap: 14, padding: 20 }, icon: { width: 62, height: 62, borderRadius: 21, alignItems: "center", justifyContent: "center" }, cardTitle: { fontSize: 22, lineHeight: 29, fontWeight: "800", letterSpacing: -0.4 }, cardCopy: { fontSize: 14, lineHeight: 22 }, metrics: { flexDirection: "row", flexWrap: "wrap", gap: 9 }, metric: { minWidth: "46%", flexGrow: 1, borderRadius: 16, padding: 14, gap: 4, borderWidth: 1 }, metricValue: { fontSize: 22, fontWeight: "800", letterSpacing: -0.4 }, metricLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 0.7, textTransform: "uppercase" }, refresh: { height: 50, borderRadius: 15, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }, refreshText: { fontSize: 14, fontWeight: "900" }, pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] } });

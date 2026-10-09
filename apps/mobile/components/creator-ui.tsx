@@ -10,7 +10,7 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 
 export function CreatorCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const colors = useColors();
-  return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: colors.background }, style]}>{children}</View>;
+  return <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, boxShadow: `0px 8px 16px ${colors.background}1A` }, style]}>{children}</View>;
 }
 
 export function StatusPill({ tone, children }: { tone: "ready" | "attention" | "muted" | "accent"; children: ReactNode }) {
@@ -25,8 +25,8 @@ export function StatusPill({ tone, children }: { tone: "ready" | "attention" | "
 }
 
 const styles = StyleSheet.create({
-  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.45, textTransform: "uppercase" },
-  card: { borderWidth: 1, borderRadius: 26, padding: 18, gap: 12, shadowOpacity: 0.18, shadowRadius: 18, shadowOffset: { width: 0, height: 9 }, elevation: 3 },
+  eyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.35, textTransform: "uppercase" },
+  card: { borderWidth: 1, borderRadius: 20, padding: 18, gap: 12, elevation: 2 },
   pill: { alignSelf: "flex-start", borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   pillText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
 });

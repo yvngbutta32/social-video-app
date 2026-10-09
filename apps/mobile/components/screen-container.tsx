@@ -1,6 +1,10 @@
 import { View, type ViewProps } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
+import { ScreenTransition } from "@/components/screen-transition";
+import { StudioBackground } from "@/components/studio-background";
+import { OfflineBanner } from "@/components/offline-banner";
+import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { cn } from "@/lib/utils";
 
 export interface ScreenContainerProps extends ViewProps {
@@ -47,6 +51,8 @@ export function ScreenContainer({
   style,
   ...props
 }: ScreenContainerProps) {
+  const layout = useResponsiveLayout();
+
   return (
     <View
       className={cn(
@@ -56,12 +62,18 @@ export function ScreenContainer({
       )}
       {...props}
     >
+      <StudioBackground />
       <SafeAreaView
         edges={edges}
         className={cn("flex-1", safeAreaClassName)}
         style={style}
       >
-        <View className={cn("flex-1", className)}>{children}</View>
+        <ScreenTransition layout={layout}>
+          <View className={cn("flex-1", className)}>
+            <OfflineBanner />
+            {children}
+          </View>
+        </ScreenTransition>
       </SafeAreaView>
     </View>
   );

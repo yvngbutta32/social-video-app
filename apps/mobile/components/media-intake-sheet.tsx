@@ -32,7 +32,7 @@ export function MediaIntakeSheet({ visible, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border, shadowColor: "#000000" }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border,  }]}>
           <View style={[styles.handle, { backgroundColor: `${colors.muted}88` }]} />
           <Text style={[styles.eyebrow, { color: colors.primary }]}>Creator source</Text>
           <Text style={[styles.title, { color: colors.foreground }]}>Start with media you own.</Text>
@@ -53,12 +53,12 @@ export function MediaIntakeSheet({ visible, onClose }: Props) {
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "#020914CC" },
-  sheet: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 36, borderTopLeftRadius: 34, borderTopRightRadius: 34, borderWidth: 1, gap: 14, shadowOpacity: 0.5, shadowRadius: 30, shadowOffset: { width: 0, height: -12 }, elevation: 16 },
+  sheet: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 36, borderTopLeftRadius: 34, borderTopRightRadius: 34, borderWidth: 1, gap: 14, boxShadow: "0px -12px 30px rgba(0, 0, 0, 0.5)", elevation: 16 },
   handle: { alignSelf: "center", height: 5, width: 44, borderRadius: 99, marginBottom: 7 },
   eyebrow: { fontSize: 10, letterSpacing: 1.3, fontWeight: "900", textTransform: "uppercase" },
   title: { fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.65 },
   copy: { fontSize: 15, lineHeight: 23 },
-  action: { height: 56, alignItems: "center", justifyContent: "center", borderRadius: 18, shadowColor: "#55E6FF", shadowOpacity: 0.2, shadowRadius: 12, elevation: 5 },
+  action: { height: 56, alignItems: "center", justifyContent: "center", borderRadius: 18, boxShadow: "0px 6px 12px #55E6FF33", elevation: 5 },
   actionText: { fontSize: 16, fontWeight: "800" },
   secondary: { height: 54, alignItems: "center", justifyContent: "center", borderRadius: 17, borderWidth: 1, backgroundColor: "#13273B" },
   secondaryText: { fontSize: 16, fontWeight: "800" },
