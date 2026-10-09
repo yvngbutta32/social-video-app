@@ -15,6 +15,7 @@ import { spawn } from 'child_process';
 import { buildFilterComplex } from './render-filter.js';
 import { generateTranscriptArtifacts } from './transcript.js';
 import { buildPythonInvocation } from './processor-command.js';
+import { cleanupFiles } from './processor-cleanup.js';
 
 // Platform-specific optimization specifications (Enhanced)
 const PLATFORM_SPECS = {
@@ -821,7 +822,7 @@ export async function processVideoJob(job, deps) {
         if (thumbnailUploadId && thumbnailUploadKey) await abortMultipart(thumbnailUploadKey, thumbnailUploadId).catch(() => {});
         throw error;
       } finally {
-        await Promise.all([outputPath, normalizedPath, thumbnailPath].filter(Boolean).map((filePath) => fs.unlink(filePath).catch(() => {})));
+        await cleanupFiles([outputPath, normalizedPath, thumbnailPath]);
       }
     }
     
@@ -848,10 +849,10 @@ export async function processVideoJob(job, deps) {
     await updateVideoStatus(videoId, 'failed', { error: error.message, failedAt: new Date().toISOString() });
     throw error;
   } finally {
-    await Promise.all([
+    await cleanupFiles([
       tempInputPath,
       ...hookVariants.map((hookVariant) => hookVariant.path),
-    ].filter(Boolean).map((filePath) => fs.unlink(filePath).catch(() => {})));
+    ]);
   }
 }
 
