@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const editLab = readFileSync(resolve(process.cwd(), "app/edit-lab.tsx"), "utf8");
 const captionQualityCard = readFileSync(resolve(process.cwd(), "components/caption-quality-card.tsx"), "utf8");
 const clipCandidateReviewCard = readFileSync(resolve(process.cwd(), "components/clip-candidate-review-card.tsx"), "utf8");
+const clipBatchPlanCard = readFileSync(resolve(process.cwd(), "components/clip-batch-plan-card.tsx"), "utf8");
 
 describe("Edit Lab precision timeline contract", () => {
   it("keeps creator-visible precision nudges and safeguards the saved trim recipe", () => {
@@ -37,5 +38,14 @@ describe("Edit Lab precision timeline contract", () => {
     expect(clipCandidateReviewCard).toContain("candidateEvidenceSummary");
     expect(clipCandidateReviewCard).toContain("Accept");
     expect(clipCandidateReviewCard).toContain("Reject");
+  });
+
+  it("keeps accepted candidates as independent, honest batch recipes", () => {
+    expect(editLab).toContain("upsertClipBatchItem");
+    expect(editLab).toContain("<ClipBatchPlanCard plan={clipBatchPlan}");
+    expect(editLab).toContain("removeClipBatchItem");
+    expect(clipBatchPlanCard).toContain("Independent cuts, one source.");
+    expect(clipBatchPlanCard).toContain("Nothing is rendered or published by this local plan yet.");
+    expect(clipBatchPlanCard).toContain("Lineage:");
   });
 });

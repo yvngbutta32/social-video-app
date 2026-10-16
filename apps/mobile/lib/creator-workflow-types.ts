@@ -1,5 +1,6 @@
 import type { LocalCreatorMedia } from "./media-import";
 import type { TimedCaptionTrack } from "./timed-caption-contract";
+import type { ClipBatchPlan } from "./clip-batch";
 
 export type SourceStatus = "ready_to_queue" | "uploading" | "processing" | "ready" | "failed" | "archived";
 export const creatorTargetPlatforms = ["tiktok", "instagram", "youtube", "linkedin"] as const;
@@ -27,6 +28,7 @@ export type MobileSource = Omit<LocalCreatorMedia, "uri" | "origin"> & {
 export type MobileEditRecipe = {
   sourceId: string;
   selectedClipCandidateId?: string;
+  clipBatchPlan?: ClipBatchPlan;
   trimStartSeconds: number;
   trimEndSeconds: number;
   composition: "smart_crop" | "fit" | "blur_background";
