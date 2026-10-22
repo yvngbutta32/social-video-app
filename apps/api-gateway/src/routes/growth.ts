@@ -18,7 +18,7 @@ import { assessCreatorWorkflowReadiness } from '../lib/reliability.js';
 import { buildExperimentScorecard } from '../lib/experiment-scorecard.js';
 import { buildReachPlan } from '../lib/reach-plan.js';
 import { metricFreshness } from '../lib/metric-ingestion.js';
-import { enqueueVariantRendering } from '../lib/processing-dispatch.js';
+import { enqueueClipBatchItemRendering, enqueueVariantRendering } from '../lib/processing-dispatch.js';
 import { createPrivatePreviewUrl } from '../lib/source-storage.js';
 
 type ReadinessScheduledPost = { status: 'draft' | 'scheduled' | 'posting' | 'posted' | 'failed' | 'cancelled'; retryCount: number; errorMessage?: string | null };
@@ -49,6 +49,21 @@ const learningQuerySchema = z.object({
 
 const clipCandidateQuerySchema = z.object({
   platform: z.enum(supportedGrowthPlatforms).default('tiktok'),
+});
+
+const clipBatchRenderSchema = z.object({
+  planId: z.string().min(1).max(180),
+  items: z.array(z.object({
+    batchItemId: z.string().min(1).max(180),
+    candidateId: z.string().min(1).max(180),
+    platform: z.enum(supportedGrowthPlatforms),
+    title: z.string().trim().min(1).max(180),
+    revision: z.number().int().positive(),
+    sourceRange: z.object({
+      startSeconds: z.number().finite().min(0),
+      endSeconds: z.number().finite().positive(),
+    }).refine((range) => range.endSeconds > range.startSeconds, { message: 'The batch item end must be after its start.' }),
+  })).min(1).max(24),
 });
 
 function videoFingerprint(video: {
@@ -290,6 +305,88 @@ export function createGrowthRoutes() {
         ],
       },
     });
+  });
+
+  app.post('/clip-batches/:videoId/render', zValidator('json', clipBatchRenderSchema), async (c: any) => {
+    const actor = c.get('user');
+    const videoId = c.req.param('videoId');
+    const input = c.req.valid('json');
+    const video = await prisma.video.findUnique({
+      where: { id: videoId },
+      select: {
+        id: true,
+        workspaceId: true,
+        durationSeconds: true,
+        variants: { select: { id: true, status: true, minioObjectKey: true, generationParams: true }, orderBy: { createdAt: 'asc' } },
+      },
+    });
+    if (!video) throw new HTTPException(404, { message: 'Source video not found' });
+    await requireSelectedCreatorWorkspaceResourceAccess(c, actor, video.workspaceId);
+
+    const results = await Promise.all(input.items.map(async (item: z.infer<typeof clipBatchRenderSchema>['items'][number]) => {
+      const existing = video.variants.find((variant) => {
+        const params = variant.generationParams;
+        return Boolean(params && typeof params === 'object' && !Array.isArray(params) && (params as Record<string, unknown>).clipBatchItemId === item.batchItemId);
+      });
+      const priorParams = existing && existing.generationParams && typeof existing.generationParams === 'object' && !Array.isArray(existing.generationParams)
+        ? existing.generationParams as Record<string, unknown>
+        : {};
+      const priorRevision = typeof priorParams.clipBatchItemRevision === 'number' ? priorParams.clipBatchItemRevision : 0;
+      if (existing?.status === 'ready' && existing.minioObjectKey && priorRevision === item.revision) {
+        return { batchItemId: item.batchItemId, variantId: existing.id, revision: item.revision, status: 'ready' as const, jobId: null, errorMessage: null };
+      }
+
+      try {
+        const baseRecipe = parseAdaptationRecipe(priorParams.adaptationRecipe) ?? createAutomaticAdaptationRecipe({
+          platform: item.platform as GrowthPlatform,
+          sourceVideoId: video.id,
+          durationSeconds: video.durationSeconds,
+          headline: item.title,
+        });
+        const recipe = applyManualAdaptationEdit(baseRecipe, {
+          sourceRange: item.sourceRange,
+          clipCandidateId: item.candidateId,
+          headline: item.title,
+        });
+        if (video.durationSeconds !== null && recipe.sourceRange.endSeconds > video.durationSeconds) {
+          throw new Error('The batch item range exceeds the source media duration');
+        }
+        const generationParams = {
+          ...priorParams,
+          adaptationRecipe: recipe,
+          clipBatchPlanId: input.planId,
+          clipBatchItemId: item.batchItemId,
+          clipBatchItemRevision: item.revision,
+          selectedClipCandidateId: item.candidateId,
+          renderingBoundary: 'clip_batch_item_render_required',
+          lastEditedBy: actor.id,
+          lastEditedAt: new Date().toISOString(),
+        };
+        const saved = existing
+          ? await prisma.videoVariant.update({ where: { id: existing.id }, data: { status: 'pending', completedAt: null, errorMessage: null, caption: item.title, platform: item.platform, generationParams }, select: { id: true } })
+          : await prisma.videoVariant.create({ data: { videoId: video.id, variantType: 'clip_batch_item', aspectRatio: recipe.output.aspectRatio, caption: item.title, platform: item.platform, status: 'pending', generationParams }, select: { id: true } });
+        const renderJob = await enqueueClipBatchItemRendering(saved.id, item.batchItemId, item.revision);
+        return { batchItemId: item.batchItemId, variantId: saved.id, revision: item.revision, status: renderJob.status === 'completed' ? 'ready' as const : 'queued' as const, jobId: renderJob.jobId, errorMessage: null };
+      } catch (error) {
+        if (existing) {
+          await prisma.videoVariant.update({ where: { id: existing.id }, data: { status: 'failed', errorMessage: error instanceof Error ? error.message : 'The batch item could not be queued' } });
+        }
+        return { batchItemId: item.batchItemId, variantId: existing?.id ?? null, revision: item.revision, status: 'failed' as const, jobId: null, errorMessage: error instanceof Error ? error.message : 'The batch item could not be queued' };
+      }
+    }));
+
+    return c.json({ data: {
+      videoId: video.id,
+      planId: input.planId,
+      items: results,
+      summary: {
+        total: results.length,
+        queued: results.filter((item) => item.status === 'queued').length,
+        ready: results.filter((item) => item.status === 'ready').length,
+        failed: results.filter((item) => item.status === 'failed').length,
+      },
+      nextStep: 'Each successful item has its own durable variant and idempotent render job. Retry failed items individually after the processor reports availability.',
+    } });
   });
 
   app.get('/adaptations/:variantId', async (c: any) => {

@@ -47,6 +47,10 @@ export function variantRenderJobId(variantId: string, revision: number) {
   return `variant-render:${variantId}:r${revision}`;
 }
 
+export function clipBatchRenderJobId(variantId: string, batchItemId: string, revision: number) {
+  return `clip-batch-render:${variantId}:${batchItemId}:r${revision}`;
+}
+
 export async function enqueueVariantRendering(variantId: string, revision: number) {
   const processingQueue = getQueue();
   const deterministicId = variantRenderJobId(variantId, revision);
@@ -65,6 +69,33 @@ export async function enqueueVariantRendering(variantId: string, revision: numbe
     }
   }
   const job = await processingQueue.add('render-variant', { variantId, revision }, {
+    jobId: deterministicId,
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: { age: 86400, count: 1000 },
+    removeOnFail: { age: 604800, count: 5000 },
+  });
+  return { jobId: job.id || deterministicId, status: 'queued' as const };
+}
+
+export async function enqueueClipBatchItemRendering(variantId: string, batchItemId: string, revision: number) {
+  const processingQueue = getQueue();
+  const deterministicId = clipBatchRenderJobId(variantId, batchItemId, revision);
+  const existing = await processingQueue.getJob(deterministicId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === 'waiting' || state === 'active' || state === 'delayed' || state === 'prioritized') {
+      return { jobId: deterministicId, status: 'already_queued' as const };
+    }
+    if (state === 'failed') {
+      await existing.retry('failed');
+      return { jobId: deterministicId, status: 'retried' as const };
+    }
+    if (state === 'completed') {
+      return { jobId: deterministicId, status: 'completed' as const };
+    }
+  }
+  const job = await processingQueue.add('render-variant', { variantId, revision, batchItemId }, {
     jobId: deterministicId,
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },

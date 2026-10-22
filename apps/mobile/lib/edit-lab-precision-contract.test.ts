@@ -45,7 +45,7 @@ describe("Edit Lab precision timeline contract", () => {
     expect(editLab).toContain("<ClipBatchPlanCard plan={clipBatchPlan}");
     expect(editLab).toContain("removeClipBatchItem");
     expect(clipBatchPlanCard).toContain("Independent cuts, one source.");
-    expect(clipBatchPlanCard).toContain("Nothing is rendered or published by this local plan yet.");
+    expect(clipBatchPlanCard).toContain("Rendering creates private artifacts only; it never publishes automatically.");
     expect(clipBatchPlanCard).toContain("Lineage:");
   });
 });

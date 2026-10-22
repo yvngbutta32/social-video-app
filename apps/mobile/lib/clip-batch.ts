@@ -14,6 +14,8 @@ export type ClipBatchItem = {
   revision: number;
   renderState: ClipBatchRenderState;
   artifactId: string | null;
+  renderJobId: string | null;
+  errorMessage: string | null;
   acceptedAt: string | null;
 };
 
@@ -46,6 +48,8 @@ export function normalizeClipBatchPlan(plan: ClipBatchPlan | null | undefined, m
       revision: Math.max(1, Math.floor(finite(item.revision, 1))),
       renderState,
       artifactId: clean(item.artifactId, "") || null,
+      renderJobId: clean(item.renderJobId, "") || null,
+      errorMessage: clean(item.errorMessage, "") || null,
       acceptedAt: clean(item.acceptedAt, "") || null,
     } satisfies ClipBatchItem];
   }) : [];
@@ -78,6 +82,8 @@ export function upsertClipBatchItem(
     revision: existing ? existing.revision + 1 : 1,
     renderState: existing?.renderState === "ready" ? "ready" : "not_queued",
     artifactId: existing?.artifactId ?? null,
+    renderJobId: existing?.renderJobId ?? null,
+    errorMessage: null,
     acceptedAt: existing?.acceptedAt ?? acceptedAt,
   };
   return {

@@ -11,6 +11,8 @@ import { normalizeAdaptationBrief } from "@/lib/adaptation-brief";
 import type { CreatorTargetPlatform } from "@/lib/creator-workflow";
 import { clearSecureSession, getSecureSession, saveSecureSession } from "@/lib/secure-session";
 import { parseRemoteClipCandidates } from "@/lib/remote-clip-candidates";
+import { parseClipBatchRenderResponse, type ClipBatchRenderResponse } from "@/lib/clip-batch-render-contract";
+import type { ClipBatchPlan } from "@/lib/clip-batch";
 
 function apiBaseUrl() {
   const configured = Constants.expoConfig?.extra?.viralBoostApiUrl;
@@ -125,6 +127,26 @@ export async function getClipCandidates(videoId: string, platform: CreatorTarget
   const response = await viralBoostRequest(`/api/v1/growth/clip-candidates/${encodeURIComponent(videoId)}?platform=${encodeURIComponent(platform)}`);
   if (!response.ok) throw new Error(await parseApiError(response));
   return parseRemoteClipCandidates(await response.json());
+}
+
+export async function queueClipBatchRender(videoId: string, plan: ClipBatchPlan): Promise<ClipBatchRenderResponse> {
+  const response = await viralBoostRequest(`/api/v1/growth/clip-batches/${encodeURIComponent(videoId)}/render`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      planId: plan.id,
+      items: plan.items.map((item) => ({
+        batchItemId: item.id,
+        candidateId: item.candidateId,
+        platform: item.platform,
+        title: item.title,
+        revision: item.revision,
+        sourceRange: { startSeconds: item.range.trimStartSeconds, endSeconds: item.range.trimEndSeconds },
+      })),
+    }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response));
+  return parseClipBatchRenderResponse(await response.json());
 }
 
 export async function getWorkspaceActivity() {
